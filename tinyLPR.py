@@ -7,23 +7,24 @@ import keras.backend as K
 
 from net_flops import net_flops
 
+
 class TCN:
-    def __init__(self, look_back=10, features=64, num_layers=6, kernel_size=3):
-        self.look_back = look_back
+    def __init__(self, seq_len=10, features=64, num_layers=6, kernel_size=3):
+        self.seq_len = seq_len
         self.features = features
         self.num_layers = num_layers
         self.kernel_size = kernel_size
         self.model = self.build_model()
 
     def build_model(self):        
-        inputs = Input(shape=(self.look_back, self.features), name='the_input')
+        inputs = Input(shape=(self.seq_len, self.features), name='the_input')
         x = inputs
 
         for i in range(self.num_layers):
             x = self.ResBlock(x, self.features, self.kernel_size, 2 ** i)
 
         # softmax, dense
-        x = Dense(10, activation='softmax', name='softmax')(x)
+        x = Dense(85, activation='softmax', name='softmax')(x)
         return Model(inputs=inputs, outputs=x)
 
     def ResBlock(self, x, features, kernel_size, dilation_rate):
@@ -50,15 +51,15 @@ if __name__ == "__main__":
     # x = np.ones(shape=(1, 20, features))
     # gererate data shape=(batch_size, look_back, features) value=[0, 1] linear
     x = np.linspace(0, 1, 20 * features).reshape((1, 20, features))
-    # debug x
-    print(x)
     # predict
     y = model(x)
-    _max = tf.argmax(y, axis=-1)
-    print(_max)
-    
+    tcn_max = tf.argmax(y, axis=-1)
+    print(tcn_max)
+    # summary
+    model.model.summary()
+
     # y.summary()
-    model.model.save('TCN.h5')
+    # model.model.save('TCN.h5')
     # # summary
     # model.model.summary()
     # # flops

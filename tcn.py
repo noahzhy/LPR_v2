@@ -13,15 +13,16 @@ from ctc import CTCLayer
 MAX_LABEL_LEN = 8
 
 class TCN:
-    def __init__(self, seq_length, blocks=6, filters=64):
+    def __init__(self, seq_length, num_features=128, blocks=6, filters=64):
         self.seq_length = seq_length
+        self.num_features = num_features
         self.n_filters = filters
 
         self.model = self.build(blocks)
 
     def residual_block(self, factor):
         dilation = 2 ** factor
-        inputs = Input(shape=(self.seq_length, 1))
+        inputs = Input(shape=(self.seq_length, self.num_features))
 
         # Residual block
         c1 = Conv1D(self.n_filters, kernel_size=4, strides=1, padding='causal', dilation_rate=dilation)(inputs)
@@ -48,6 +49,9 @@ class TCN:
         for dilation in range(dilations):
             block = self.residual_block(dilation)
             model.add(block)
+
+        # softmax, dense
+        model.add(Dense(85, activation='softmax', name='softmax'))
 
         return Model(inputs=model.input, outputs=model.output, name='TCN')
 
@@ -97,13 +101,18 @@ def decode_batch_predictions(pred):
 
 
 if __name__ == "__main__":
-    model = TCN(128, 6, 64)
+    width = 48
+    n_features = 256
+    model = TCN(width, n_features, 4, 64)
     model.save_model('tcn_lpr')
 
     # x = np.random.random((1, 128, 1))
-    x = np.ones(shape=(1, 128, 1))
+    # x = np.ones(shape=(1, width, n_features))
+    # linear
+    x = np.linspace(0, 1, width*n_features).reshape(1, width, n_features)
     y = model(x)
-    print(y.shape)
+    # argmax
+    y = np.argmax(y, axis=-1)
+    print(y)
+    # print(y.shape)
     # model.model.summary()
-    predicted = model.predict(x, 16)
-    print(predicted)
