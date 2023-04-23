@@ -15,8 +15,10 @@ from keras import backend as K
 
 from ctc import CTCLayer
 
-from model import TemporalConvNet
+from model import TCN
 from cnn import *
+
+from net_flops import net_flops
 
 
 MAX_LABEL_LEN = 8
@@ -43,24 +45,21 @@ print(unique_characters)
 print("Number of images found: ", len(images))
 print("Number of labels found: ", len(labels))
 print("Characters present: ", characters)
-
 # print(labels[:10], images[:10])
-
 
 
 def cnn_tcn_model():
     # inputs for cnn, image size: 48x192
-    inputs = Input(shape=(48, 192, 1), name='the_input')
-    cnn = CNN().model
-    out_cnn = cnn(inputs)
+    inputs = Input(shape=(96, 192, 1), name='the_input')
+    out_cnn = CNN()(inputs)
 
     # inputs = Input(name='the_input', shape=[128, 1], dtype='float32')
     labels = Input(name='the_labels', shape=[MAX_LABEL_LEN], dtype='float32')
 
-    x = TemporalConvNet(256, 6, 64)
-    x = x.model(out_cnn)
+    tcn = TCN(256, 6, 64).model
+    x = tcn(out_cnn)
     # Output layer
-    x = Dense(unique_labels+1, activation="softmax", name="dense2")(x)
+    x = Dense(unique_characters+1, activation="softmax", name="dense2")(x)
     output = CTCLayer("ctc_loss")(labels, x)
 
     model = Model(inputs=[inputs, labels], outputs=output, name="tcn")
@@ -85,8 +84,12 @@ def train():
 
 
 if __name__ == "__main__":
-    pass
-    # model = cnn_tcn_model()
+    # pass
+    model = cnn_tcn_model()
+    model.summary()
+
+    net_flops(model, table=True)
+
     # img = np.random.rand(1, 48, 192, 1)
     # label = np.random.rand(1, MAX_LABEL_LEN)
     # y_pred = model.predict([img, label])

@@ -5,7 +5,7 @@ from keras.layers import *
 from keras.optimizers import *
 import keras.backend as K
 
-from keras_flops import get_flops
+# from keras_flops import get_flops
 
 
 ## DepthSepCov
@@ -59,10 +59,10 @@ class SteamConv(Layer):
     def call(self, x):
         y = self.conv1(x)
         return y
-    
+
 
 class CNN:
-    def __init__(self, input_shape=(48, 192, 1)):
+    def __init__(self, input_shape=(96, 192, 1)):
         ''' simple version
         input                 28^2x1
         Conv2d          3x3 2 15^2x16
@@ -81,23 +81,38 @@ class CNN:
     def build(self):
         x = Input(shape=self.input_shape)
 
-        y = SteamConv()(x)
-    
-        y = DepthSepCov(32, (3, 3), (1, 1))(y)
-        y = DepthSepCov(64, (3, 3), (2, 2))(y)
-    
-        y = DepthSepCov(128, (5, 5), (1, 1))(y)
-        y = DepthSepCov(128, (5, 5), (1, 1))(y)
-    
-        y = DepthSepCov(256, (5, 5), (1, 1))(y)
-        y = DepthSepCov(256, (5, 5), (1, 1))(y)
+        # y = SteamConv()(x)
+        # y = DepthSepCov(32, (3, 3), (1, 1))(y)
+        # y = DepthSepCov(64, (3, 3), (2, 2))(y)
+        # y = DepthSepCov(128, (5, 5), (1, 1))(y)
+        # y = DepthSepCov(128, (5, 5), (1, 1))(y)
+        # y = DepthSepCov(256, (5, 5), (1, 1))(y)
+        # y = DepthSepCov(256, (5, 5), (1, 1))(y)
+        # y = GlobalAveragePooling2D()(y)
+
+        y = Conv2D(16, (3, 3), (2, 2), activation='relu')(x)
+
+        y = SeparableConv2D(32, (3, 3), (1, 1))(y)
+        y = SeparableConv2D(64, (3, 3), (2, 2))(y)
+
+        y = SeparableConv2D(128, (5, 5), (1, 1))(y)
+        y = SeparableConv2D(128, (5, 5), (1, 1))(y)
+
+        y = SeparableConv2D(256, (5, 5), (1, 1))(y)
+        y = SeparableConv2D(256, (5, 5), (1, 1))(y)
 
         y = GlobalAveragePooling2D()(y)
-        
+
         return Model(inputs=x, outputs=y, name='CNN')
+
+    def __call__(self, x):
+        return self.model(x)
 
 
 if __name__ == "__main__":
-    x = np.random.random((1, 48, 192, 1))
+    x = np.random.random((1, 96, 192, 1))
     x = tf.convert_to_tensor(x)
-    model = CNN(input_shape=(48, 192, 1))
+
+    model = CNN(input_shape=(96, 192, 1))
+    model.model.summary()
+    model.model.save('CNN.h5')
