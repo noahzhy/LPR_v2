@@ -35,22 +35,23 @@ def ResBlock(x, filters, kernel_size, dilation_rate):
 
 # Sequence Model 时序模型
 def TCN(classes=85, epoch=20):
-    inputs = Input(shape=(28, 28))
-    x = ResBlock(inputs, filters=32, kernel_size=3, dilation_rate=1)
-    x = ResBlock(x, filters=32, kernel_size=3, dilation_rate=2)
-    x = ResBlock(x, filters=16, kernel_size=3, dilation_rate=4)
+    inputs = Input(shape=(72, 128))
+    x = ResBlock(inputs, filters=64, kernel_size=3, dilation_rate=1)
+    x = ResBlock(x, filters=64, kernel_size=3, dilation_rate=2)
+    x = ResBlock(x, filters=64, kernel_size=3, dilation_rate=4)
     # x = Flatten()(x)
     x = Dense(classes, activation='softmax')(x)
     model = Model(inputs=inputs, outputs=x)
-    # View network structure 查看网络结构
+
     model.summary()
-    # Compile model 编译模型
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    # Training model 训练模型
-    model.fit(train_x, train_y, batch_size=500, nb_epoch=epoch, verbose=2, validation_data=(valid_x, valid_y))
-    # Assessment model 评估模型
-    pre = model.evaluate(test_x, test_y, batch_size=500, verbose=2)
-    print('test_loss:', pre[0], '- test_acc:', pre[1])
+    save_path = 'mTCN.h5'
+    model.save(save_path)
+
+    # model.fit(train_x, train_y, batch_size=500, nb_epoch=epoch, verbose=2, validation_data=(valid_x, valid_y))
+    # pre = model.evaluate(test_x, test_y, batch_size=500, verbose=2)
+    # print('test_loss:', pre[0], '- test_acc:', pre[1])
+
 
 # # MINST数字从0-9共10个，即10个类别
 classes = 85

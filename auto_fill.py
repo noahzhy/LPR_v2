@@ -44,8 +44,8 @@ if __name__ == '__main__':
     # open the raw image via path
     # path = 'data/88거9742_1625465514.jpg'       # black-white
     # path = 'data/79버1012_1625465514.jpg'       # green
-    path = 'data/제주79바4470_1625339435.jpg'    # yellow
-    # path = 'data/55구1601_1625339435.jpg'       # blue
+    # path = 'data/제주79바4470_1625339435.jpg'    # yellow
+    path = 'data/55구1601_1625339435.jpg'       # blue
     # print its radio
     print('Radio: ', Image.open(path).size[0] / Image.open(path).size[1])
 
