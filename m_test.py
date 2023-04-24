@@ -4,7 +4,7 @@ import tensorflow as tf
 from keras.datasets import mnist
 input_data = tf.keras.datasets.mnist
 from keras.models import Model
-from keras.layers import add, Input, Conv1D, Activation, Flatten, Dense
+from keras.layers import *
 
 
 # Load data 载入数据
@@ -19,9 +19,9 @@ def read_data(path):
 
 # Residual block 残差块
 def ResBlock(x, filters, kernel_size, dilation_rate):
-    r = Conv1D(filters, kernel_size, padding='same', dilation_rate=dilation_rate, activation='relu')(
+    r = Conv1D(filters, kernel_size, padding='causal', dilation_rate=dilation_rate, activation='relu')(
         x)  # first convolution
-    r = Conv1D(filters, kernel_size, padding='same', dilation_rate=dilation_rate)(r)  # Second convolution
+    r = Conv1D(filters, kernel_size, padding='causal', dilation_rate=dilation_rate)(r)  # Second convolution
 
     if x.shape[-1] == filters:
         shortcut = x
@@ -35,10 +35,10 @@ def ResBlock(x, filters, kernel_size, dilation_rate):
 
 # Sequence Model 时序模型
 def TCN(classes=85, epoch=20):
-    inputs = Input(shape=(72, 128))
-    x = ResBlock(inputs, filters=64, kernel_size=3, dilation_rate=1)
-    x = ResBlock(x, filters=64, kernel_size=3, dilation_rate=2)
-    x = ResBlock(x, filters=64, kernel_size=3, dilation_rate=4)
+    inputs = Input(shape=(96, 48))
+    x = ResBlock(inputs, filters=128, kernel_size=3, dilation_rate=1)
+    x = ResBlock(x, filters=128, kernel_size=3, dilation_rate=2)
+    x = ResBlock(x, filters=128, kernel_size=3, dilation_rate=4)
     # x = Flatten()(x)
     x = Dense(classes, activation='softmax')(x)
     model = Model(inputs=inputs, outputs=x)

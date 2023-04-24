@@ -50,6 +50,7 @@ class TinyLPR(Model):
         # x = MaxPooling2D(pool_size=(2, 2))(x)
 
         n, h, w, c = x.shape
+        print(n, h, w, c)
 
         x = Reshape(target_shape=(h*2, w//2*c))(x)
         x = Dense(self.filters, activation='relu')(x)
