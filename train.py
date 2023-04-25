@@ -3,6 +3,7 @@ import sys
 
 import os
 import numpy as np
+from PIL import Image
 import matplotlib.pyplot as plt
 
 from pathlib import Path
@@ -15,83 +16,60 @@ from keras import backend as K
 
 from ctc import CTCLayer
 
-from model import TCN
-from cnn import *
-
-from net_flops import net_flops
+from tinyLPR import *
+from utils import *
 
 
-MAX_LABEL_LEN = 8
-
-CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ"  # exclude IO
-CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
-DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
-print(CHARS_DICT)
-print(DECODE_DICT)
-
-print(len(CHARS_DICT))
-
-data_dir = Path("./data/")
-
-# Get list of all the images
-images = sorted(list(map(str, list(data_dir.glob("*.jpg")))))
-labels = [img.split(os.path.sep)[-1].split("_")[0] for img in images]
-characters = set(char for label in labels for char in label)
-characters = sorted(list(characters))
-
-unique_characters = len(characters)
-print(unique_characters)
-
-print("Number of images found: ", len(images))
-print("Number of labels found: ", len(labels))
-print("Characters present: ", characters)
-# print(labels[:10], images[:10])
-
-
-def cnn_tcn_model():
-    # inputs for cnn, image size: 48x192
-    inputs = Input(shape=(96, 192, 1), name='the_input')
-    out_cnn = CNN()(inputs)
-
-    # inputs = Input(name='the_input', shape=[128, 1], dtype='float32')
-    labels = Input(name='the_labels', shape=[MAX_LABEL_LEN], dtype='float32')
-
-    tcn = TCN(256, 6, 64).model
-    x = tcn(out_cnn)
-    # Output layer
-    x = Dense(unique_characters+1, activation="softmax", name="dense2")(x)
-    output = CTCLayer("ctc_loss")(labels, x)
-
-    model = Model(inputs=[inputs, labels], outputs=output, name="tcn")
-    model.compile(optimizer="adam")
-    model.summary()
-    model.save('model.h5')
-
-    return model
+input_shape = (96, 48, 1)
+dataLoader = LPGenerate(128, shuffle=True)
+model = TinyLPR(
+    shape=input_shape,
+    output_dim=86,
+    train=True,
+).build(input_shape)
 
 
 def train():
-    model = cnn_tcn_model()
-
-    history = model.fit(
-        x=[train_x, train_y],
-        y=np.zeros(len(train_x)),
-        batch_size=32,
-        epochs=10,
-        validation_data=([test_x, test_y], np.zeros(len(test_x))),
+    model.compile(
+        optimizer=Adam(lr=0.001),
+        loss=lambda y_true, y_pred: y_pred,
     )
 
+    history = model.fit(
+        dataLoader,
+        batch_size=128,
+        epochs=50,
+    )
+    model.save(filepath='tinyLPR.h5')
+
+
+def test():
+    test_model = TinyLPR(
+        shape=input_shape,
+        output_dim=86,
+        train=False,
+    ).build(input_shape)
+    # load
+    test_model.load_weights('tinyLPR_best.h5')
+    img_path = 'data/서울31아5565_1625746016.jpg'
+    test_img = Image.open(img_path)
+    # create empty Image
+    img = create_image(test_img)
+    # rotate 270 with PIL
+    img = img.rotate(270, expand=True)
+    # convert to numpy array
+    img = np.array(img)
+    model_input = np.expand_dims(img, axis=-1) / 255.0
+    model_input = np.expand_dims(model_input, axis=0)
+    # predict
+    y_pred = test_model.predict(model_input)
+    # decode
+    decoded = K.ctc_decode(y_pred, input_length=np.ones(y_pred.shape[0]) * y_pred.shape[1], greedy=True)[0][0]
+    out = K.get_value(decoded)
+    # print
+    print(out)
 
 
 if __name__ == "__main__":
-    # pass
-    model = cnn_tcn_model()
-    model.summary()
-
-    net_flops(model, table=True)
-
-    # img = np.random.rand(1, 48, 192, 1)
-    # label = np.random.rand(1, MAX_LABEL_LEN)
-    # y_pred = model.predict([img, label])
-    
-    # print(y_pred)
+    # train()
+    test()

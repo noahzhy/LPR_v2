@@ -1,13 +1,21 @@
 import os
-import time
-from pathlib import Path
-import glob
-import numpy as np
 import sys
+import time
+import glob
+from pathlib import Path
+
+import matplotlib
+from matplotlib import pyplot as plt
+
+import numpy as np
+from PIL import Image
+import tensorflow as tf
+from tensorflow.keras.utils import *
+
 
 MAX_LABEL_LEN = 8
 
-CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ"
+CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
 print(len(CHARS))
 # to utf-8
 CHARS = CHARS.encode('utf-8').decode('utf-8')
@@ -24,13 +32,49 @@ koreaCity = {
     '제주':'Q'
 }
 
+
+# open image via path and keep Green channel only
+def open_image(path, channel='G'):
+    img = Image.open(path)
+    img = img.convert('RGB')
+    r, g, b = img.split()
+    if channel == 'R':
+        return r
+    elif channel == 'G':
+        return g
+    elif channel == 'B':
+        return b
+    else:
+        return img.convert('L')
+
+
+# create a new image with black background
+def create_image(raw_img, width=96, height=48):
+    img = Image.new('L', (width, height), (0))
+    # resize the raw image to fit the target image width, and keep the ratio
+    raw_img = raw_img.resize(
+        (width, int(raw_img.size[1] * width / raw_img.size[0])),
+        Image.ANTIALIAS
+    )
+    # paste the raw image to the target image at top
+    img.paste(raw_img, (0, 0))
+    return img
+
+
+# function to binarize the image, threshold is 128
+def binarize(img, threshold=128):
+    ba = np.array(img)
+    ba[ba < threshold] = 0
+    ba[ba >= threshold] = 255
+    return Image.fromarray(ba)
+
+
 # function to_label
 # input: string
 # output: list of ints
 # example: "제주79바4470" -> [83, 7, 9, 45, 4, 4, 7, 0]
 def to_label(text):
-    text = text.encode('utf-8').decode('utf-8')
-    print("len: ", len(text))
+    # text = text.encode('utf-8').decode('utf-8')
     # if first two characters are korea city
     if text[:2] in koreaCity:
         text = koreaCity[text[:2]] + text[2:]
@@ -38,10 +82,8 @@ def to_label(text):
     # to list of ints
     ints = []
     for c in text:
-        print(c)
         ints.append(CHARS_DICT[c])
     return ints
-
 
 
 # function string_to_ints
@@ -69,12 +111,70 @@ def ints_to_string(ints):
 # test_txt = "제주79바4470"
 # print(to_label(test_txt))
 
+# function path to label
+# input: path
+# output: label
+# example: "data/제주79바4470.jpg" -> [83, 7, 9, 45, 4, 4, 7, 0]
+def path_to_label(path):
+    label = os.path.basename(path).split('.')[0].split('_')[0]
+    return to_label(label)
+
+
+# function to generate batch
+# input: batch_size, images, labels
+# output: batch_images, batch_labels
+class LPGenerate(Sequence):
+    def __init__(self, batch_size, dir_path="data", target_size=(48, 96), shuffle=True):
+        self.batch_size = batch_size
+        self.images = glob.glob(dir_path + '/*.*')
+        # shuffle the images
+        np.random.shuffle(self.images)
+        self.target_size = target_size
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        return int(np.floor(len(self.images) / self.batch_size))
+
+    def __getitem__(self, idx):
+        batch_images = self.images[idx * self.batch_size:(idx + 1) * self.batch_size]
+        X, Y = self.__data_generation(batch_images)
+        return X, Y
+
+    def on_epoch_end(self):
+        self.indexes = np.arange(len(self.images))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, batches):
+        # swap height and width
+        width, height = self.target_size
+        X = np.empty((self.batch_size, *(height, width), 1))
+        Y = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
+
+        for i, img_path in enumerate(batches):
+            img = open_image(img_path, channel='G')
+            img = create_image(img, height, width)
+            img = img.rotate(270, expand=True)
+            label = path_to_label(img_path)
+
+            X[i,] = np.expand_dims(img, axis=-1) / 255.0
+            Y[i,][:len(label)] = np.array(label)
+
+        return [X, Y], Y
+
 
 if __name__ == "__main__":
-    f_path = "data/*.jpg"
-    for i in glob.glob(f_path):
-        f_base = os.path.basename(i)
-        f_name = os.path.splitext(f_base)[0].split("_")[0]
-        print(f_name)
-        label = to_label(f_name)
-        print(label)
+    dataLoader = LPGenerate(5, shuffle=True)
+    for i in range(0, len(dataLoader)):
+        x, y = dataLoader[i]
+        # print('%s, %s => %s' % (x['input_image'].shape, x['label'].shape, y.shape))
+        img_data, label_data = x
+        # show image
+        img = Image.fromarray(np.squeeze(img_data[0] * 255).astype(np.uint8))
+        img.show()
+
+        print(img_data.shape)
+        print(label_data)
+        print(y)
+        break

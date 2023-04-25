@@ -1,5 +1,9 @@
 import os
+import glob
+import random
+
 from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -28,8 +32,8 @@ def open_image(path, channel='G'):
 
 
 # create a new image with black background
-def create_image(raw_img):
-    img = Image.new('L', (TARGET_WIDTH, TARGET_HEIGHT), (0))
+def create_image(raw_img, width=TARGET_WIDTH, height=TARGET_HEIGHT):
+    img = Image.new('L', (width, height), (0))
     # resize the raw image to fit the target image width, and keep the ratio
     raw_img = raw_img.resize(
         (TARGET_WIDTH, int(raw_img.size[1] * TARGET_WIDTH / raw_img.size[0])),
@@ -40,12 +44,25 @@ def create_image(raw_img):
     return img
 
 
+# function to binarize the image, threshold is 128
+def binarize(img, threshold=128):
+    ba = np.array(img)
+    ba[ba < threshold] = 0
+    ba[ba >= threshold] = 255
+    return Image.fromarray(ba)
+
+
 if __name__ == '__main__':
     # open the raw image via path
     # path = 'data/88거9742_1625465514.jpg'       # black-white
     # path = 'data/79버1012_1625465514.jpg'       # green
     # path = 'data/제주79바4470_1625339435.jpg'    # yellow
     path = 'data/55구1601_1625339435.jpg'       # blue
+
+    path_list = glob.glob('data/*.jpg')
+    random.shuffle(path_list)
+    path = path_list[0]
+
     # print its radio
     print('Radio: ', Image.open(path).size[0] / Image.open(path).size[1])
 
@@ -60,6 +77,10 @@ if __name__ == '__main__':
 
         # create a new image
         img = create_image(img)
+
+        # binarize the image
+        # img = binarize(img, threshold=128)
+
         plt.imshow(img, cmap='gray')
 
     # # show
