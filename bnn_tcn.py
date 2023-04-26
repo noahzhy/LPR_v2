@@ -28,9 +28,17 @@ class BCNN(Model):
         self.maxpool1 = MaxPooling2D((2, 2))
         self.bn1 = BatchNormalization(scale=False)
 
-        self.cnn_block1 = self.CNN_Block(64, (3, 3))
-        self.cnn_block2 = self.CNN_Block(128, (3, 3))
-        self.cnn_block3 = self.CNN_Block(256, (3, 3))
+        # depthwise
+        self.depthwise_block1 = self.Depthwise_Block(32, 3, name="depthwise_block1")
+        self.depthwise_block2 = self.Depthwise_Block(64, 3, name="depthwise_block2")
+        self.depthwise_block3 = self.Depthwise_Block(128, 3, name="depthwise_block3")
+
+        # self.cnn_block1 = self.CNN_Block(64, (3, 3))
+        # self.cnn_block2 = self.CNN_Block(128, (3, 3))
+        # self.cnn_block3 = self.CNN_Block(256, (3, 3))
+
+        # dropout
+        self.dropout = Dropout(0.5)
 
     def CNN_Block(self, filters, kernel_size, strides=1, name=None):
         return Sequential([
@@ -39,12 +47,25 @@ class BCNN(Model):
             BatchNormalization(scale=False),
         ], name=name)
 
+    def Depthwise_Block(self, filters, kernel_size, strides=1, name=None):
+        # dw + pw
+        return Sequential([
+            lq.layers.QuantDepthwiseConv2D(kernel_size, padding='same', strides=strides),
+            MaxPooling2D((2, 2)),
+            BatchNormalization(scale=False),
+            lq.layers.QuantConv2D(filters, (1, 1), padding='same', strides=strides, **kwargs),
+            BatchNormalization(scale=False),
+        ], name=name)
+
     def call(self, inputs):
         x = self.qConv2d1(inputs)
         x = self.bn1(self.maxpool1(x))
-        x = self.cnn_block1(x)
-        x = self.cnn_block2(x)
-        x = self.cnn_block3(x)
+        # x = self.cnn_block1(x)
+        # x = self.cnn_block2(x)
+        # x = self.cnn_block3(x)
+        x = self.depthwise_block1(x)
+        x = self.depthwise_block2(x)
+        x = self.depthwise_block3(x)
         return x
 
 
@@ -98,25 +119,23 @@ class BTCN(Model):
         self.dense_softmax = lq.layers.QuantDense(self.output_dim, activation="softmax", **kwargs)
         # resblock
         for i in range(3):
-            setattr(self, f"resblock{i}", ResBlock(128, i))
+            setattr(self, f"resblock{i}", ResBlock(features, i))
 
     def call(self, inputs):
         x = inputs
-        # shape
+
         for i in range(3):
             x = getattr(self, f"resblock{i}")(x)
-            # shape
-            print(x.shape)
-            
+
         # softmax dense
         x = self.dense_softmax(x)
         return x
 
 
 if __name__ == "__main__":
-    model = BTCN()
+    # model = BTCN()
     # model = ResBlock(128, 1)
-    # model = BCNN()
+    model = BCNN()
     model.build(input_shape=(None, 28, 28, 1))
     model.summary()
     # save
