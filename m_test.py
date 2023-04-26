@@ -29,7 +29,7 @@ def ResBlock(x, filters, kernel_size, dilation_rate):
         shortcut = Conv1D(filters, kernel_size, padding='same')(x)  	# shortcut (shortcut)
     o = add([r, shortcut])
     # Activation function
-    o = Activation('relu')(o)  
+    o = Activation('relu')(o)
     return o
 
 

@@ -69,43 +69,53 @@ class ResBlock(Model):
             dilation_rate=dilation_rate,
             **kwargs
         )
+        self.shortcut = lq.layers.QuantConv1D(
+            filters, 1,
+            padding='same',
+            name=f"shortcut_{factor}",
+            **kwargs
+        )
         self.bn2 = BatchNormalization(scale=False)
-        self.add = Add()
         self.relu = Activation('relu')
+        self.add = Add()
 
     def call(self, inputs):
+        shortcut = self.shortcut(inputs)
         x = self.conv1(inputs)
         x = self.relu(self.bn1(x))
         x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.add([x, inputs])
+        x = self.relu(self.bn2(x))
+        x = self.add([x, shortcut])
         x = self.relu(x)
         return x
 
 
 class BTCN(Model):
-    def __init__(self):
+    def __init__(self, features=128, output_dim=10, **kwargs):
         super().__init__()
-        self.dense_softmax = lq.layers.QuantDense(10, activation="softmax", **kwargs)
+        self.features = features
+        self.output_dim = output_dim
+        self.dense_softmax = lq.layers.QuantDense(self.output_dim, activation="softmax", **kwargs)
+        # resblock
+        for i in range(3):
+            setattr(self, f"resblock{i}", ResBlock(128, i))
 
     def call(self, inputs):
         x = inputs
         # shape
-        print(x.shape)
-        
         for i in range(3):
-            x = ResBlock(64, i, name=f"resblock{i}")(x)
+            x = getattr(self, f"resblock{i}")(x)
             # shape
             print(x.shape)
-
+            
         # softmax dense
         x = self.dense_softmax(x)
-
         return x
 
+
 if __name__ == "__main__":
-    # model = BTCN()
-    model = ResBlock(128, 2)
+    model = BTCN()
+    # model = ResBlock(128, 1)
     # model = BCNN()
     model.build(input_shape=(None, 28, 28, 1))
     model.summary()
