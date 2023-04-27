@@ -9,7 +9,7 @@ from ctc import CTCLayer
 
 from net_flops import net_flops
 
-from keras_flops import get_flops
+# from keras_flops import get_flops
 
 
 MAX_LABEL_LEN = 8
@@ -114,24 +114,23 @@ if __name__ == "__main__":
         optimizer=Adam(lr=0.001),
         metrics=['accuracy']
     )
-    model.save(filepath='tinyLPR.h5')
 
-    flops = get_flops(model, batch_size=1)
-    # to M FLOPS
-    print('FLOPS: %.3f M' % (flops/1e6))
+    # flops = get_flops(model, batch_size=1)
+    # # to M FLOPS
+    # print('FLOPS: %.3f M' % (flops/1e6))
 
-    # x = np.random.randn(1, 96, 48, 1)
+    # # x = np.random.randn(1, 96, 48, 1)
 
-    model.compile(
-        optimizer=Adam(lr=0.001),
-        metrics=['accuracy'],
-        loss={'ctc_loss': lambda y_true, y_pred: y_pred}
-    )
+    # model.compile(
+    #     optimizer=Adam(lr=0.001),
+    #     metrics=['accuracy'],
+    #     loss={'ctc_loss': lambda y_true, y_pred: y_pred}
+    # )
 
-    from utils import *
-    dataLoader = LPGenerate(5, shuffle=True)
-    for i in range(10):
-        x, y = dataLoader.__getitem__(i)
-        model.fit(x=x, y=y, batch_size=1, epochs=1, verbose=1)
-        model.save(filepath='tinyLPR.h5')
+    # from utils import *
+    # dataLoader = LPGenerate(5, shuffle=True)
+    # for i in range(10):
+    #     x, y = dataLoader.__getitem__(i)
+    #     model.fit(x=x, y=y, batch_size=1, epochs=1, verbose=1)
+    #     model.save(filepath='tinyLPR.h5')
 

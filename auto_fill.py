@@ -15,6 +15,14 @@ TARGET_HEIGHT = 48
 # print radio
 print('Radio: ', TARGET_WIDTH / TARGET_HEIGHT)
 
+# opencv
+import cv2
+# otsu binarization
+def otsu_binarize(img):
+    img = np.array(img)
+    ret, img = cv2.threshold(img, 0, 255, cv2.THRESH_OTSU)
+    return Image.fromarray(img)
+
 
 # open image via path and keep Green channel only
 def open_image(path, channel='G'):
@@ -59,9 +67,9 @@ if __name__ == '__main__':
     # path = 'data/제주79바4470_1625339435.jpg'    # yellow
     path = 'data/55구1601_1625339435.jpg'       # blue
 
-    path_list = glob.glob('data/*.jpg')
-    random.shuffle(path_list)
-    path = path_list[0]
+    # path_list = glob.glob('data/*.jpg')
+    # random.shuffle(path_list)
+    # path = path_list[0]
 
     # print its radio
     print('Radio: ', Image.open(path).size[0] / Image.open(path).size[1])
@@ -74,13 +82,10 @@ if __name__ == '__main__':
         # title
         plt.title(color)
         img = open_image(path, channel=color)
-
         # create a new image
         img = create_image(img)
-
         # binarize the image
-        # img = binarize(img, threshold=128)
-
+        # img = otsu_binarize(img)
         plt.imshow(img, cmap='gray')
 
     # # show

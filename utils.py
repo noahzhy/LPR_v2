@@ -69,6 +69,39 @@ def binarize(img, threshold=128):
     return Image.fromarray(ba)
 
 
+# 对图片进行二值化处理，otsu算法
+def otsu_binarize(img):
+    img = np.array(img)
+    # img = img.convert('L')
+    # img = np.array(img)
+    w, h = img.shape
+    # 计算灰度直方图
+    hist = np.zeros(256)
+    for i in range(w):
+        for j in range(h):
+            hist[img[i, j]] += 1
+    # 归一化
+    hist = hist / (w * h)
+    # 计算类间方差
+    max_var = 0
+    threshold = 0
+    for t in range(256):
+        # 计算类间方差
+        w0 = np.sum(hist[:t])
+        w1 = np.sum(hist[t:])
+        u0 = np.sum([i * hist[i] for i in range(t)]) / w0
+        u1 = np.sum([i * hist[i] for i in range(t, 256)]) / w1
+        var = w0 * w1 * (u0 - u1) ** 2
+        # 寻找最大类间方差
+        if var > max_var:
+            max_var = var
+            threshold = t
+    # 二值化
+    img[img < threshold] = 0
+    img[img >= threshold] = 255
+    return Image.fromarray(img)
+
+
 # function to_label
 # input: string
 # output: list of ints
