@@ -46,11 +46,11 @@ def conv1x1(filters, strides=1, name=None):
     )
 
 
-def conv3x3_bn(filters, kernel_size=(3, 3), strides=1, name=None):
+def conv3x3_bn(filters, kernel_size=(3, 3), strides=1, padding="same", name=None):
     return Sequential(
         [
             lq.layers.QuantConv2D(
-                filters, kernel_size, padding="same", strides=strides, name=name, **kwargs
+                filters, kernel_size, padding=padding, strides=strides, name=name, **kwargs
             ),
             BatchNormalization(momentum=0.9, scale=False),
         ],
@@ -58,11 +58,11 @@ def conv3x3_bn(filters, kernel_size=(3, 3), strides=1, name=None):
     )
 
 
-def conv1x1_bn(filters, kernel_size=(3, 3), strides=1, name=None):
+def conv1x1_bn(filters, kernel_size=(3, 3), strides=1, padding="same", name=None):
     return Sequential(
         [
             lq.layers.QuantConv2D(
-                filters, kernel_size, padding="same", strides=strides, name=name, **kwargs
+                filters, kernel_size, padding=padding, strides=strides, name=name, **kwargs
             ),
             BatchNormalization(momentum=0.9, scale=False),
         ],
@@ -104,12 +104,19 @@ def lb_activation(filters, activation="ste_sign", name=None):
         name=name + "_lb_activation",
     )
 
-def lba_conv3x3_lba(in_channels, out_channels, strides=1, name=None):
+def lba_conv3x3_lba(
+        in_channels, 
+        out_channels,
+        kernel_size=(3, 3),
+        strides=1,
+        padding="same",
+        name=None,
+    ):
     return Sequential(
         [
             # 3x3 conv
             lb_activation(filters=in_channels, name="lb_activation_1"),
-            conv3x3_bn(filters=out_channels, strides=strides),
+            conv3x3_bn(filters=out_channels, kernel_size=kernel_size, strides=strides, padding=padding, name="conv3x3_bn_1"),
             # relu
             lb_activation(filters=out_channels, activation="relu", name="lb_activation_2"),
         ],
@@ -237,10 +244,11 @@ class TinyLPR(Model):
         self.basic_block2 = lba_conv3x3_lba(64, 128, strides=1, name="basic_block_2")
         self.basic_block3 = BasicBlock(128, 128, strides=2, name="basic_block_3")
         # self.basic_block4 = lba_conv3x3_lba(128, 128, strides=1, name="basic_block_4")
-        self.conv2d_last = Sequential([
-            lb_activation(filters=128, name="lb_activation_1"),
-            conv3x3_bn(filters=128, kernel_size=(1, 6), name="conv2d_1"),
-        ], name="conv2d_last")
+        self.conv2d_last = lba_conv3x3_lba(
+            128, 128, strides=1,
+            kernel_size=(1, 3),
+            name="lb_activation_5"
+        )
 
         # dense
         self.dense1 = lq.layers.QuantDense(features, activation="relu", **kwargs)
@@ -265,6 +273,7 @@ class TinyLPR(Model):
         # x = self.basic_block4(x)
 
         x = self.conv2d_last(x)
+        print(x.shape)
 
         n, h, w, c = x.shape
         x = tf.split(x, num_or_size_splits=2, axis=2)
