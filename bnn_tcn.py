@@ -52,7 +52,7 @@ def conv3x3_bn(filters, kernel_size=(3, 3), strides=1, name=None):
             lq.layers.QuantConv2D(
                 filters, kernel_size, padding="same", strides=strides, name=name, **kwargs
             ),
-            BatchNormalization(scale=False),
+            BatchNormalization(momentum=0.9, scale=False),
         ],
         name=name,
     )
@@ -64,7 +64,7 @@ def conv1x1_bn(filters, kernel_size=(3, 3), strides=1, name=None):
             lq.layers.QuantConv2D(
                 filters, kernel_size, padding="same", strides=strides, name=name, **kwargs
             ),
-            BatchNormalization(scale=False),
+            BatchNormalization(momentum=0.9, scale=False),
         ],
         name=name,
     )
@@ -77,7 +77,7 @@ def conv3x3_pool_bn(filters, strides=1, name=None):
                 filters, (3, 3), padding="same", strides=strides, name=name, **kwargs
             ),
             MaxPooling2D((2, 2), strides=(2, 2)),
-            BatchNormalization(scale=False),
+            BatchNormalization(momentum=0.9, scale=False),
         ],
         name=name,
     )
@@ -89,7 +89,7 @@ def depthwise_conv3x3_bn(strides=1, name=None):
             lq.layers.QuantDepthwiseConv2D(
                 (3, 3), padding="same", strides=strides, name=name,
             ),
-            BatchNormalization(scale=False),
+            BatchNormalization(momentum=0.9, scale=False),
         ],
         name=name,
     )
@@ -104,7 +104,7 @@ def lb_activation(filters, activation="ste_sign", name=None):
         name=name + "_lb_activation",
     )
 
-def basic_block(in_channels, out_channels, strides=1, name=None):
+def lba_conv3x3_lba(in_channels, out_channels, strides=1, name=None):
     return Sequential(
         [
             # 3x3 conv
@@ -112,11 +112,6 @@ def basic_block(in_channels, out_channels, strides=1, name=None):
             conv3x3_bn(filters=out_channels, strides=strides),
             # relu
             lb_activation(filters=out_channels, activation="relu", name="lb_activation_2"),
-            # 1x1 conv
-            lb_activation(filters=out_channels, name="lb_activation_3"),
-            conv1x1_bn(filters=out_channels),
-            # relu
-            lb_activation(filters=out_channels, activation="relu", name="lb_activation_4"),
         ],
         name=name,
     )
@@ -128,7 +123,7 @@ class BasicBlock(Model):
         self.strides = strides
         self.conv1 = Sequential([
             lb_activation(filters=in_channels, name="lb_activation_1"),
-            conv3x3_bn(filters=out_channels, strides=strides),
+            conv3x3_bn(filters=in_channels, strides=strides),
         ])
         self.avgpool = AveragePooling2D((2, 2), strides=(2, 2))
         self.add = Add()
@@ -143,6 +138,7 @@ class BasicBlock(Model):
     def call(self, inputs):
         if self.strides == 1:
             out = self.conv1(inputs)
+            out = self.add([out, inputs])
         else:
             x = self.conv1(inputs)
             avg = self.avgpool(inputs)
@@ -152,60 +148,6 @@ class BasicBlock(Model):
         # out = self.conv2(out)
         # out = self.lb_activation2(out)
         return out
-
-
-class BCNN(Model):
-    def __init__(self, shape=(28, 28, 1)):
-        super().__init__()
-        self.qConv2d1 = lq.layers.QuantConv2D(
-            32, (3, 3),
-            kernel_quantizer="ste_sign",
-            kernel_constraint="weight_clip",
-            use_bias=False,
-            input_shape=shape
-        )
-        self.maxpool1 = MaxPooling2D((2, 2))
-        self.bn1 = BatchNormalization(scale=False)
-
-        # depthwise
-        self.depthwise_block1 = self.Depthwise_Block(32, 3, name="depthwise_block1")
-        self.depthwise_block2 = self.Depthwise_Block(64, 3, name="depthwise_block2")
-        self.depthwise_block3 = self.Depthwise_Block(128, 3, name="depthwise_block3")
-
-        # self.cnn_block1 = self.CNN_Block(64, (3, 3))
-        # self.cnn_block2 = self.CNN_Block(128, (3, 3))
-        # self.cnn_block3 = self.CNN_Block(256, (3, 3))
-
-        # dropout
-        self.dropout = Dropout(0.5)
-
-    def CNN_Block(self, filters, kernel_size, strides=1, name=None):
-        return Sequential([
-            lq.layers.QuantConv2D(filters, kernel_size, padding='same', strides=strides, **kwargs),
-            MaxPooling2D((2, 2)),
-            BatchNormalization(scale=False),
-        ], name=name)
-
-    def Depthwise_Block(self, filters, kernel_size, strides=1, name=None):
-        # dw + pw
-        return Sequential([
-            lq.layers.QuantDepthwiseConv2D(kernel_size, padding='same', strides=strides),
-            MaxPooling2D((2, 2)),
-            BatchNormalization(scale=False),
-            lq.layers.QuantConv2D(filters, (1, 1), padding='same', strides=strides, **kwargs),
-            BatchNormalization(scale=False),
-        ], name=name)
-
-    def call(self, inputs):
-        x = self.qConv2d1(inputs)
-        x = self.bn1(self.maxpool1(x))
-        # x = self.cnn_block1(x)
-        # x = self.cnn_block2(x)
-        # x = self.cnn_block3(x)
-        x = self.depthwise_block1(x)
-        x = self.depthwise_block2(x)
-        x = self.depthwise_block3(x)
-        return x
 
 
 class ResBlock(Model):
@@ -221,7 +163,7 @@ class ResBlock(Model):
             kernel_constraint="weight_clip",
             use_bias=False,
         )
-        self.bn1 = BatchNormalization(scale=False)
+        self.bn1 = BatchNormalization(momentum=0.9, scale=False)
         self.conv2 = lq.layers.QuantConv1D(
             filters, kernel_size,
             padding='causal',
@@ -235,7 +177,7 @@ class ResBlock(Model):
             name=f"shortcut_{factor}",
             **kwargs
         )
-        self.bn2 = BatchNormalization(scale=False)
+        self.bn2 = BatchNormalization(momentum=0.9, scale=False)
         self.relu = Activation('relu')
         self.add = Add()
 
@@ -289,12 +231,12 @@ class TinyLPR(Model):
             use_bias=False,
         )
         self.maxpool1 = MaxPooling2D((2, 2))
-        self.bn1 = BatchNormalization(momentum=0.9)
+        self.bn1 = BatchNormalization(momentum=0.9, scale=False)
 
         self.basic_block1 = BasicBlock(64, 64, strides=2, name="basic_block_1")
-        self.basic_block2 = BasicBlock(64, 128, strides=1, name="basic_block_2")
+        self.basic_block2 = lba_conv3x3_lba(64, 128, strides=1, name="basic_block_2")
         self.basic_block3 = BasicBlock(128, 128, strides=2, name="basic_block_3")
-        # self.basic_block4 = BasicBlock(128, 128, strides=1, name="basic_block_4")
+        # self.basic_block4 = lba_conv3x3_lba(128, 128, strides=1, name="basic_block_4")
         self.conv2d_last = Sequential([
             lb_activation(filters=128, name="lb_activation_1"),
             conv3x3_bn(filters=128, kernel_size=(1, 6), name="conv2d_1"),
@@ -309,29 +251,6 @@ class TinyLPR(Model):
 
         self.dense_softmax = lq.layers.QuantDense(self.output_dim, activation="softmax", **kwargs)
         self.ctc = CTCLayer(name="ctc_loss")
-
-    def Conv2D_Block(self, filters, kernel_size, strides=1, name=None):
-        return Sequential([
-            lq.layers.QuantConv2D(filters, kernel_size, padding='same', strides=strides, **kwargs),
-            BatchNormalization(momentum=0.999, scale=False),
-        ], name=name)
-
-    def Depthwise_Block(self, filters, kernel_size, strides=1, name=None):
-        # dw + pw
-        return Sequential([
-            lq.layers.QuantDepthwiseConv2D(
-                kernel_size,
-                strides=strides,
-                padding='same',
-                kernel_constraint="weight_clip",
-                use_bias=False,
-            ),
-            BatchNormalization(momentum=0.9),
-            Activation("relu"),
-            lq.layers.QuantConv2D(filters, (1, 1), padding='same', strides=strides, **kwargs),
-            BatchNormalization(momentum=0.9),
-            Activation("relu"),
-        ], name=name)
 
     def call(self, inputs):
         x = inputs
@@ -373,10 +292,11 @@ class TinyLPR(Model):
 
 if __name__ == "__main__":
     model = TinyLPR(train=False)
-    # model = BTCN()
-    # model = ResBlock(128, 1)
-    # model = BCNN()
     model.build(input_shape=(None, 96, 48, 1))
+    model.compile(
+        optimizer=Adam(lr=0.001),
+        loss=lambda y_true, y_pred: y_pred,
+    )
 
     labels = tf.constant([[1, 2, 3, 4, 5, 6, 7, 8]], dtype="int32")
     x = tf.random.normal((1, 96, 48, 1), dtype=tf.float32)
