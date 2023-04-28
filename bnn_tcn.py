@@ -52,7 +52,7 @@ def conv3x3_bn(filters, kernel_size=(3, 3), strides=1, padding="same", name=None
             lq.layers.QuantConv2D(
                 filters, kernel_size, padding=padding, strides=strides, name=name, **kwargs
             ),
-            BatchNormalization(momentum=0.9, scale=False),
+            BatchNormalization(momentum=0.999, scale=False),
         ],
         name=name,
     )
@@ -64,7 +64,7 @@ def conv1x1_bn(filters, kernel_size=(3, 3), strides=1, padding="same", name=None
             lq.layers.QuantConv2D(
                 filters, kernel_size, padding=padding, strides=strides, name=name, **kwargs
             ),
-            BatchNormalization(momentum=0.9, scale=False),
+            BatchNormalization(momentum=0.999, scale=False),
         ],
         name=name,
     )
@@ -77,7 +77,7 @@ def conv3x3_pool_bn(filters, strides=1, name=None):
                 filters, (3, 3), padding="same", strides=strides, name=name, **kwargs
             ),
             MaxPooling2D((2, 2), strides=(2, 2)),
-            BatchNormalization(momentum=0.9, scale=False),
+            BatchNormalization(momentum=0.999, scale=False),
         ],
         name=name,
     )
@@ -89,7 +89,7 @@ def depthwise_conv3x3_bn(strides=1, name=None):
             lq.layers.QuantDepthwiseConv2D(
                 (3, 3), padding="same", strides=strides, name=name,
             ),
-            BatchNormalization(momentum=0.9, scale=False),
+            BatchNormalization(momentum=0.999, scale=False),
         ],
         name=name,
     )
@@ -170,7 +170,7 @@ class ResBlock(Model):
             kernel_constraint="weight_clip",
             use_bias=False,
         )
-        self.bn1 = BatchNormalization(momentum=0.9, scale=False)
+        self.bn1 = BatchNormalization(momentum=0.999, scale=False)
         self.conv2 = lq.layers.QuantConv1D(
             filters, kernel_size,
             padding='causal',
@@ -184,7 +184,7 @@ class ResBlock(Model):
             name=f"shortcut_{factor}",
             **kwargs
         )
-        self.bn2 = BatchNormalization(momentum=0.9, scale=False)
+        self.bn2 = BatchNormalization(momentum=0.999, scale=False)
         self.relu = Activation('relu')
         self.add = Add()
 
@@ -238,7 +238,7 @@ class TinyLPR(Model):
             use_bias=False,
         )
         self.maxpool1 = MaxPooling2D((2, 2))
-        self.bn1 = BatchNormalization(momentum=0.9, scale=False)
+        self.bn1 = BatchNormalization(momentum=0.999, scale=False)
 
         self.basic_block1 = BasicBlock(64, 64, strides=2, name="basic_block_1")
         self.basic_block2 = lba_conv3x3_lba(64, 128, strides=1, name="basic_block_2")
@@ -246,7 +246,7 @@ class TinyLPR(Model):
         # self.basic_block4 = lba_conv3x3_lba(128, 128, strides=1, name="basic_block_4")
         self.conv2d_last = lba_conv3x3_lba(
             128, 128, strides=1,
-            kernel_size=(1, 3),
+            kernel_size=(3, 3),
             name="lb_activation_5"
         )
 
@@ -257,13 +257,14 @@ class TinyLPR(Model):
         for i in range(self.tcn_blocks):
             setattr(self, f"resblock{i}", ResBlock(features, i))
 
-        self.dense_softmax = lq.layers.QuantDense(self.output_dim, activation="softmax", **kwargs)
+        # self.dense_softmax = lq.layers.QuantDense(self.output_dim, activation="softmax", **kwargs)
+        self.dense_softmax = Dense(self.output_dim, activation="softmax", **kwargs)
         self.ctc = CTCLayer(name="ctc_loss")
 
-    def call(self, inputs):
-        x = inputs
+    def build(self, inputs_shape):
+        inputs = Input(shape=inputs_shape)
 
-        x = self.qConv2d1(x)
+        x = self.qConv2d1(inputs)
         x = self.maxpool1(x)
         x = self.bn1(x)
 
@@ -273,7 +274,6 @@ class TinyLPR(Model):
         # x = self.basic_block4(x)
 
         x = self.conv2d_last(x)
-        print(x.shape)
 
         n, h, w, c = x.shape
         x = tf.split(x, num_or_size_splits=2, axis=2)
@@ -293,15 +293,18 @@ class TinyLPR(Model):
             # input shape: [batch_size, max_label_length]
             labels = Input(name='labels', shape=(MAX_LABEL_LEN,), dtype='int64')
             # ctc
-            x = self.ctc(labels, x)
-            return x
-        else:
-            return x
+            ctc = self.ctc(labels, x)
+            return Model(inputs=[inputs, labels], outputs=ctc, name='tiny_lpr')
+
+        return Model(inputs=inputs, outputs=x, name="tiny_lpr")
+
+    def call(self, inputs):
+        return self.build(inputs.shape)(inputs)
 
 
 if __name__ == "__main__":
-    model = TinyLPR(train=False)
-    model.build(input_shape=(None, 96, 48, 1))
+    input_shape = (96, 48, 1)
+    model = TinyLPR(train=True).build(input_shape)
     model.compile(
         optimizer=Adam(lr=0.001),
         loss=lambda y_true, y_pred: y_pred,
@@ -309,7 +312,7 @@ if __name__ == "__main__":
 
     labels = tf.constant([[1, 2, 3, 4, 5, 6, 7, 8]], dtype="int32")
     x = tf.random.normal((1, 96, 48, 1), dtype=tf.float32)
-    y = model(x)
+    y = model([x, labels])
     print(y.shape)
 
     model.summary()

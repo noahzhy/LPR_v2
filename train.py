@@ -1,32 +1,34 @@
 import os
 import sys
 
-import os
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-
-from pathlib import Path
-from collections import Counter
-
-import numpy as np
 import tensorflow as tf
-from keras.layers import Input, Dense, Lambda, Layer
+from keras.layers import *
 from keras import backend as K
 
-from ctc import CTCLayer
-
-from tinyLPR import *
 from utils import *
+from ctc import CTCLayer
+from tinyLPR import *
+# from bnn_tcn import *
 
 
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
+bs = 64
 input_shape = (96, 48, 1)
-dataLoader = LPGenerate(128, shuffle=True)
+dataLoader = LPGenerate(bs, shuffle=True)
 model = TinyLPR(
     shape=input_shape,
     output_dim=86,
     train=True,
 ).build(input_shape)
+
+# model = TinyLPR(
+#     output_dim=86,
+#     train=True,
+# ).build(input_shape)
 
 
 def train():
@@ -37,10 +39,10 @@ def train():
 
     history = model.fit(
         dataLoader,
-        batch_size=128,
+        batch_size=bs,
         epochs=50,
     )
-    model.save(filepath='tinyLPR.h5')
+    model.save(filepath='tinyLPR_bnn.h5')
 
 
 def test():
@@ -71,5 +73,5 @@ def test():
 
 
 if __name__ == "__main__":
-    # train()
-    test()
+    train()
+    # test()

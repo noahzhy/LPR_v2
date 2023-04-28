@@ -9,7 +9,7 @@ from ctc import CTCLayer
 
 from net_flops import net_flops
 
-# from keras_flops import get_flops
+from keras_flops import get_flops
 
 
 MAX_LABEL_LEN = 8
@@ -36,20 +36,15 @@ class TinyLPR(Model):
 
     def CnnBlock(self):
         inputs = Input(shape=self.shape, name='input')
-        x = Conv2D(32, (3, 3), padding='same', activation='relu')(inputs)
+        x = Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)
         x = MaxPooling2D(pool_size=(2, 2))(x)
-        
-        x = Conv2D(64, (3, 3), padding='same', activation='relu')(x)
+
         x = Conv2D(64, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D(pool_size=(2, 2))(x)
 
         x = Conv2D(128, (3, 3), padding='same', activation='relu')(x)
-        x = Conv2D(128, (3, 3), padding='same', activation='relu')(x)
         x = MaxPooling2D(pool_size=(2, 2))(x)
-
-        # x = Conv2D(256, (3, 3), padding='same', activation='relu')(x)
-        x = Conv2D(256, (1, 1), padding='same', activation='relu')(x)
-        # x = MaxPooling2D(pool_size=(2, 2))(x)
+        x = Conv2D(128, (1, 1), padding='same', activation='relu')(x)
 
         n, h, w, c = x.shape
         # split the image into 2 parts via width and concat them via height
@@ -65,12 +60,9 @@ class TinyLPR(Model):
 
         inputs = Input(shape=(self.seq_len, self.filters), name='input_tcn')
         r = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, activation='relu')(inputs)
-        r = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(r)
+        r = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, activation='relu')(r)
 
-        if inputs.shape[-1] == self.filters:
-            shortcut = inputs
-        else:
-            shortcut = Conv1D(self.filters, self.kernel_size, padding='same')(inputs)
+        shortcut = Conv1D(self.filters, self.kernel_size, padding='same')(inputs)
 
         o = add([r, shortcut])
         o = Activation('relu')(o)
@@ -91,7 +83,7 @@ class TinyLPR(Model):
         if self.train:
             labels = Input(name='labels', shape=(MAX_LABEL_LEN,), dtype='int64')
             ctc = CTCLayer(name='ctc_loss')(labels, x)
-            return Model(inputs=[inputs, labels], outputs=ctc, name='TCN')            
+            return Model(inputs=[inputs, labels], outputs=ctc, name='TCN')
 
         return Model(inputs=inputs, outputs=x, name='TCN')
 
@@ -115,9 +107,9 @@ if __name__ == "__main__":
         metrics=['accuracy']
     )
 
-    # flops = get_flops(model, batch_size=1)
+    flops = get_flops(model, batch_size=1)
     # # to M FLOPS
-    # print('FLOPS: %.3f M' % (flops/1e6))
+    print('FLOPS: %.3f M' % (flops/1e6))
 
     # # x = np.random.randn(1, 96, 48, 1)
 
