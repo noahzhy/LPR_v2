@@ -15,7 +15,9 @@ from tensorflow.keras.utils import *
 
 MAX_LABEL_LEN = 8
 
-CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
+# CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
+CHARS = """0A8가9B호C저D우E나F고G허H주I다J노K거L배M라N도O너P구Q마a로b더c누d바e모f러g두h사i보j머k루l아m소n버o무p자q오1서2부3하4조5어6수7 """
+
 print(len(CHARS))
 # to utf-8
 CHARS = CHARS.encode('utf-8').decode('utf-8')
@@ -118,6 +120,11 @@ def to_label(text):
         ints.append(CHARS_DICT[c])
     return ints
 
+# text = "제주79바4470"
+# print(to_label(text))
+# print(CHARS_DICT['-'])
+# quit()
+
 
 # function string_to_ints
 # input: string
@@ -141,6 +148,13 @@ def ints_to_string(ints):
     return string
 
 
+def decode_label(ints):
+    # remove -1
+    ints = [i for i in ints if i != -1]
+    # remove duplicates
+    return ints_to_string(ints)
+
+
 # test_txt = "제주79바4470"
 # print(to_label(test_txt))
 
@@ -160,8 +174,6 @@ class LPGenerate(Sequence):
     def __init__(self, batch_size, dir_path="data", target_size=(48, 96), shuffle=True):
         self.batch_size = batch_size
         self.images = glob.glob(dir_path + '/*.*')
-        # shuffle the images
-        np.random.shuffle(self.images)
         self.target_size = target_size
         self.shuffle = shuffle
         self.on_epoch_end()

@@ -223,7 +223,7 @@ class BTCN(Model):
 
 
 class TinyLPR(Model):
-    def __init__(self, features=128, output_dim=85, tcn_blocks=3, train=False, **kwargs):
+    def __init__(self, features=128, output_dim=85, tcn_blocks=2, train=False, **kwargs):
         super().__init__()
         self.features = features
         self.output_dim = output_dim
@@ -275,9 +275,9 @@ class TinyLPR(Model):
 
         x = self.conv2d_last(x)
 
-        n, h, w, c = x.shape
         x = tf.split(x, num_or_size_splits=2, axis=2)
         x = Concatenate(axis=1)([x[0], x[1]])
+        n, h, w, c = x.shape
         x = Reshape((h, w*c))(x)
         
         # dense
