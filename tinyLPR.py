@@ -49,13 +49,13 @@ class TinyLPR(Model):
 
         shortcut = Conv2D(32, (1, 1), padding='same', strides=2)(x)
         x = self.Separable_Conv2D(32, (5, 5), strides=(2, 2), padding='same', activation='relu')(x)
-        x = self.Separable_Conv2D(32, (5, 5), padding='same', activation='relu')(x)
+        x = self.Separable_Conv2D(32, (5, 5), padding='same')(x)
         x = add([x, shortcut])
         x = Activation('relu')(x)
 
         shortcut = Conv2D(64, (1, 1), padding='same', strides=2)(x)
         x = self.Separable_Conv2D(64, (5, 5), strides=(2, 2), padding='same', activation='relu')(x)
-        x = self.Separable_Conv2D(64, (5, 5), padding='same', activation='relu')(x)
+        x = self.Separable_Conv2D(64, (5, 5), padding='same')(x)
         x = add([x, shortcut])
         x = Activation('relu')(x)
 
@@ -64,7 +64,7 @@ class TinyLPR(Model):
         x = self.Separable_Conv2D(128, (5, 5), padding='same', activation='relu')(x)
         x = self.Separable_Conv2D(128, (5, 5), padding='same', activation='relu')(x)
         x = self.Separable_Conv2D(128, (5, 5), padding='same', activation='relu')(x)
-        x = self.Separable_Conv2D(128, (5, 5), padding='same', activation='relu')(x)
+        x = self.Separable_Conv2D(128, (5, 5), padding='same')(x)
         x = add([x, shortcut])
         x = Activation('relu')(x)
 
@@ -88,7 +88,7 @@ class TinyLPR(Model):
         r = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, activation='relu')(inputs)
         r = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(r)
 
-        shortcut = Conv1D(self.filters, self.kernel_size, padding='same')(inputs)
+        shortcut = Conv1D(self.filters, 1, padding='same')(inputs)
 
         o = add([r, shortcut])
         o = Activation('relu')(o)

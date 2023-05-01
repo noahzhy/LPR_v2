@@ -2,11 +2,13 @@ import os
 import sys
 import time
 import glob
+import random
 from pathlib import Path
 
 import matplotlib
 from matplotlib import pyplot as plt
 
+import cv2
 import numpy as np
 from PIL import Image
 import tensorflow as tf
@@ -201,8 +203,12 @@ class LPGenerate(Sequence):
             img = open_image(img_path, channel='G')
             img = create_image(img, height, width)
             img = img.rotate(270, expand=True)
-            label = path_to_label(img_path)
 
+            # # binarize image via openCV
+            # img = np.array(img)
+            # img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+            label = path_to_label(img_path)
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
             Y[i,][:len(label)] = np.array(label)
 
