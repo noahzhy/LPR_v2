@@ -18,7 +18,7 @@ from tensorflow.keras.utils import *
 MAX_LABEL_LEN = 8
 
 # CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
-CHARS = """0A8가9B호C저D우E나F고G허H주I다J노K거L배M라N도O너P구Q마a로b더c누d바e모f러g두h사i보j머k루l아m소n버o무p자q오1서2부3하4조5어6수7 """
+CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 
 print(len(CHARS))
 # to utf-8
@@ -63,47 +63,6 @@ def create_image(raw_img, width=96, height=48):
     # paste the raw image to the target image at top
     img.paste(raw_img, (0, 0))
     return img
-
-
-# function to binarize the image, threshold is 128
-def binarize(img, threshold=128):
-    ba = np.array(img)
-    ba[ba < threshold] = 0
-    ba[ba >= threshold] = 255
-    return Image.fromarray(ba)
-
-
-# 对图片进行二值化处理，otsu算法
-def otsu_binarize(img):
-    img = np.array(img)
-    # img = img.convert('L')
-    # img = np.array(img)
-    w, h = img.shape
-    # 计算灰度直方图
-    hist = np.zeros(256)
-    for i in range(w):
-        for j in range(h):
-            hist[img[i, j]] += 1
-    # 归一化
-    hist = hist / (w * h)
-    # 计算类间方差
-    max_var = 0
-    threshold = 0
-    for t in range(256):
-        # 计算类间方差
-        w0 = np.sum(hist[:t])
-        w1 = np.sum(hist[t:])
-        u0 = np.sum([i * hist[i] for i in range(t)]) / w0
-        u1 = np.sum([i * hist[i] for i in range(t, 256)]) / w1
-        var = w0 * w1 * (u0 - u1) ** 2
-        # 寻找最大类间方差
-        if var > max_var:
-            max_var = var
-            threshold = t
-    # 二值化
-    img[img < threshold] = 0
-    img[img >= threshold] = 255
-    return Image.fromarray(img)
 
 
 # function to_label
@@ -156,9 +115,6 @@ def decode_label(ints):
     # remove duplicates
     return ints_to_string(ints)
 
-
-# test_txt = "제주79바4470"
-# print(to_label(test_txt))
 
 # function path to label
 # input: path

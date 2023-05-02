@@ -84,6 +84,8 @@ if __name__ == '__main__':
         img = open_image(path, channel=color)
         # create a new image
         img = create_image(img)
+        # img = np.invert(img)
+        
         # binarize the image
         # img = otsu_binarize(img)
         plt.imshow(img, cmap='gray')

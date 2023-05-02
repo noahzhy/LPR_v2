@@ -33,7 +33,7 @@ arr[:, [1, 2]] = arr[:, [2, 1]]
 
 shifts = np.arange(arr.shape[1])
 for i, shift in enumerate(shifts):
-    arr[:, i] = np.roll(arr[:, i], shift)
+    arr[:, i] = np.roll(arr[:, i], shift*2)
 
 
 
@@ -44,5 +44,25 @@ _list = arr.reshape(-1).tolist()
 word = ''.join(_list)
 print(word)
 
-word = """0A8가9B호C저D우E나F고G허H주I다J노K거L배M라N도O너P구Q마a로b더c누d바e모f러g두h사i보j머k루l아m소n버o무p자q오1서2부3하4조5어6수7 """
+word = """
+0가A조a서B무b
+1나C호c어D부d
+2다E고e저F수f
+3라G노g허H우h
+4마I도i거J주j
+5바K로k너L배l
+6사M모m더N구n
+7아O보o러P누p
+8자Q소q머두하
+9오버루
+"""
+
+# remove \n and space
+word = word.replace('\n', '')
+print(word)
+print(len(word))
+
+
+
+# word = """0A8가9B호C저D우E나F고G허H주I다J노K거L배M라N도O너P구Q마a로b더c누d바e모f러g두h사i보j머k루l아m소n버o무p자q오1서2부3하4조5어6수7 """
 print(len(word))

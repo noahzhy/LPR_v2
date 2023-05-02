@@ -30,11 +30,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
 BATCH_SIZE = 64
-TRAIN_SAMPLE = 8935
+TRAIN_SAMPLE = len(glob.glob('data/*'))
 NUM_EPOCHS = 200
 WARMUP_EPOCH = 10
 LEARNING_RATE = 2e-3
-# LEARNING_RATE = 3e-4
 
 input_shape = (96, 48, 1)
 trainGen = LPGenerate(BATCH_SIZE, shuffle=True)
@@ -56,13 +55,13 @@ test_model = TinyLPR(
     blocks=blocks,
 ).build(input_shape)
 
-# model.load_weights(filepath='best_model_94.h5')
+# model.load_weights(filepath='best_model_945.h5')
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
-warmup_batches = WARMUP_EPOCH * TRAIN_SAMPLE / BATCH_SIZE
-total_steps = int(NUM_EPOCHS * TRAIN_SAMPLE / BATCH_SIZE)
+warmup_batches = WARMUP_EPOCH * epoch_step
+total_steps = int(NUM_EPOCHS * epoch_step)
 # Compute the number of warmup batches.
-warmup_steps = int(WARMUP_EPOCH * TRAIN_SAMPLE / BATCH_SIZE)
+warmup_steps = int(WARMUP_EPOCH * epoch_step)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -106,12 +105,11 @@ def train(model, train_data, val_data):
         epochs=NUM_EPOCHS,
         callbacks=callbacks_list,
         validation_data=val_data,
-        # validation_freq=10,
     )
 
 def evl():
-    test_model.load_weights(filepath='best_model_945.h5')
-    test_model.train = True
+    test_model.load_weights(filepath='best_model.h5')
+    test_model.train = False
     test_imgs = glob.glob('test/*.*')
     # get 200 random images
     test_imgs = random.sample(test_imgs, 200)
@@ -144,7 +142,14 @@ def evl():
     print('total: ', total, 'correct: ', correct, 'acc: ', correct/total)
 
 
+def save_without_ctc(model):
+    model.load_weights(filepath='best_model_945.h5')
+    model.summary()
+    model.save(filepath='final_model.h5', include_optimizer=False)
+
+
 if __name__ == '__main__':
     model.summary()
     # train(model, trainGen, valGen)
-    evl()
+    # evl()
+    save_without_ctc(test_model)

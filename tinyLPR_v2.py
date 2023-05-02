@@ -19,8 +19,8 @@ class TinyLPR(Model):
         shape=(96, 48, 1),
         seq_len=24,
         filters=128,
-        blocks=3,
-        kernel_size=3,
+        blocks=2,
+        kernel_size=2,
         output_dim=86,
         train=False,
         **kwargs
@@ -49,14 +49,16 @@ class TinyLPR(Model):
                 layer.momentum = 0.9
         #! Cut MobileNet where it hits 1/8th input resolution; i.e. (HW/8, HW/8, C)
         cut_point = nn.get_layer('block_6_expand_relu')
-        x = Conv2D(filters=128, kernel_size=1, strides=1, activation='relu')(cut_point.output)
+
+        x = Conv2D(filters=self.filters, kernel_size=1, strides=1, activation='relu')(cut_point.output)
 
         x = tf.split(x, num_or_size_splits=2, axis=2)
-        x = Concatenate(axis=1)(x)
-        n, h, w, c = x.shape
-        x = Reshape((h, w*c))(x)
+        x = tf.concat(x, axis=1)
+        # x = tf.reshape(x, (-1, x.shape[1], x.shape[2] * x.shape[3]))
+        x = Conv2D(filters=self.filters, kernel_size=(1, 3), padding='valid', activation='relu')(x)
+        x = tf.squeeze(x, axis=2)
 
-        x = Dense(self.filters, activation='relu')(x)
+        # x = Dense(self.filters, activation='relu')(x)
 
         return Model(inputs=nn.input, outputs=x, name='CNN')
 
@@ -64,17 +66,17 @@ class TinyLPR(Model):
         dilation_rate = 2 ** factor
 
         inputs = Input(shape=(self.seq_len, self.filters), name='input_tcn')
-        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate, kernel_initializer="he_normal")(inputs)
-        x = BatchNormalization(momentum=0.9)(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(inputs)
+        x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.05)(x)
 
-        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate, kernel_initializer="he_normal")(x)
-        x = BatchNormalization(momentum=0.9)(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(x)
+        x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.05)(x)
 
-        shortcut = Conv1D(self.filters, 1, padding='same', kernel_initializer="he_normal")(inputs)
+        shortcut = Conv1D(self.filters, 1, padding='same')(inputs)
 
         x = add([x, shortcut])
         x = Activation('relu')(x)
@@ -125,8 +127,6 @@ if __name__ == "__main__":
         optimizer=Adam(lr=0.001),
         metrics=['accuracy']
     )
-    # save
-    model.save('mbv3s.h5')
 
     flops = get_flops(model, batch_size=1)
     # to M FLOPS
