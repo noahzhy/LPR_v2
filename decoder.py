@@ -3,6 +3,8 @@ import random
 import numpy as np
 
 
+MAX_LABEL_LEN = 8
+
 # CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
 CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
@@ -31,24 +33,16 @@ def str2list(string):
 
 
 def decoder(file_path):
-    lp = None
+    lp = ""
     # get file base name from file path
     f_base = os.path.basename(file_path).split('.')[0]
-    # check amount of '_' in file name
-    if f_base.count('_') == 2:
-        # split via '_' to get the parameters
-        city, plate, number = f_base.split('_')
-        # connect city and plate
-        city_plate = city + plate
-        lp = city_plate
 
-    if f_base.count('_') == 1:
-        # split via '_' to get the parameters
-        plate, number = f_base.split('_')
-        lp = plate
-
-    if f_base.count('_') == 0:
-        lp = f_base
+    # split via '_' to a list
+    f_base = f_base.split('_')
+    for i in f_base:
+        if len(lp+i) > MAX_LABEL_LEN+1:
+            break
+        lp += i
 
     return str2list(lp)
 
@@ -58,5 +52,9 @@ if __name__ == "__main__":
     print(decoder(f_path))
     f_path = "Q45_다1234_356892.jpg"
     print(decoder(f_path))
-    f_path = "Q45다1234.jpg"
+    f_path = "제주45다_5462_20230115213242_14223844.jpg"
+    print(decoder(f_path))
+    f_path = "Q45다5462_20230115213242_14223844.jpg"
+    print(decoder(f_path))
+    f_path = "45다5462.jpg"
     print(decoder(f_path))

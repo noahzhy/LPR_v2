@@ -1,7 +1,7 @@
 import os
 import sys
-import random
 import glob
+import random
 
 import cv2
 import numpy as np
@@ -22,22 +22,22 @@ from cosine import *
 # from mcallback import *
 from utils import *
 from ctc import CTCLayer
-# from tinyLPR import *
-from tinyLPR_v2 import TinyLPR
+from tinyLPR_v3 import *
+# from tinyLPR_v2 import TinyLPR
 # from bnn_tcn import *
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
-BATCH_SIZE = 64
-TRAIN_SAMPLE = len(glob.glob('data/*'))
+BATCH_SIZE = 128
+TRAIN_SAMPLE = 53596
 NUM_EPOCHS = 200
 WARMUP_EPOCH = 10
 LEARNING_RATE = 2e-3
 
 input_shape = (96, 48, 1)
-trainGen = LPGenerate(BATCH_SIZE, shuffle=True)
-valGen = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test')
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=-1)
+test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test')
 blocks = 2
 
 model = TinyLPR(
@@ -78,6 +78,7 @@ def train(model, train_data, val_data):
         loss=lambda y_true, y_pred: y_pred,
         optimizer=Adam(learning_rate=LEARNING_RATE),
     )
+    # model.load_weights(filepath='best_model_945.h5')
     callbacks_list = [
         ModelCheckpoint(
             filepath='best_model.h5',
@@ -107,40 +108,6 @@ def train(model, train_data, val_data):
         validation_data=val_data,
     )
 
-def evl():
-    test_model.load_weights(filepath='best_model.h5')
-    test_model.train = False
-    test_imgs = glob.glob('test/*.*')
-    # get 200 random images
-    test_imgs = random.sample(test_imgs, 200)
-    total = 0
-    correct = 0
-    for img_path in test_imgs:
-        # load image
-        test_img = Image.open(img_path)
-        # create empty Image
-        img = create_image(test_img)
-        # rotate 270 with PIL
-        img = img.rotate(270, expand=True)
-        img = np.array(img)
-        model_input = np.expand_dims(img, axis=-1) / 255.0
-        model_input = np.expand_dims(model_input, axis=0)
-        # predict
-        y_pred = test_model.predict(model_input)
-        # decode
-        decoded = K.ctc_decode(y_pred, input_length=np.ones(y_pred.shape[0]) * y_pred.shape[1], greedy=True)[0][0]
-        out = K.get_value(decoded)[0].tolist()
-        # remove -1 value in list
-        out = [i for i in out if i != -1]
-        # get label
-        label = path_to_label(path=img_path)
-        # compare
-        if out == label:
-            correct += 1
-        total += 1
-
-    print('total: ', total, 'correct: ', correct, 'acc: ', correct/total)
-
 
 def save_without_ctc(model):
     model.load_weights(filepath='best_model_945.h5')
@@ -148,8 +115,72 @@ def save_without_ctc(model):
     model.save(filepath='final_model.h5', include_optimizer=False)
 
 
+
+def test():
+    test_img, test_label = test_dataloader.__getitem__(0)
+
+    test_model.load_weights(filepath='best_model.h5')
+
+    y_pred = test_model.predict(test_img[0])
+    shape = y_pred[:, 2:, :].shape
+    ctc_decode = tf.keras.backend.ctc_decode(
+        y_pred[:, 2:, :], input_length=np.ones(shape[0]) * shape[1]
+    )[0][0]
+    out = tf.keras.backend.get_value(ctc_decode)[:, :MAX_LABEL_LEN]
+
+    correct = 0
+    for i in range(BATCH_SIZE):
+        y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
+        label = "".join([DECODE_DICT[x] for x in test_label[i] if x != 86])
+        # print(y_pred, label)
+        if y_pred == label:
+            correct += 1
+        else:
+            if not is_correct(y_pred):
+                correct += 1
+            else:
+                print("{}, \t{}".format(label, y_pred))
+
+    print(correct / BATCH_SIZE)
+
+
+def is_correct(string):
+    if len(string) < 7:
+        return False
+
+    # if every char is number
+    if string.isdigit():
+        return False
+
+    # if last four char is number
+    if not string[-4:].isdigit():
+        return False
+
+    kor_count = 0
+    num_count = 0
+    for char in string:
+        if char.isdigit():
+            num_count += 1
+        # if char is not number and not alphabet
+        elif not char.isalpha():
+            kor_count += 1
+
+    if kor_count > 1:
+        return False
+
+    if not (num_count == 6 or num_count == 7):
+        return False
+
+    # if first char is alphabet
+    if string[-5].isdigit():
+        return False
+
+
+    return True
+
+
 if __name__ == '__main__':
     model.summary()
-    # train(model, trainGen, valGen)
-    # evl()
-    save_without_ctc(test_model)
+    train(model, train_dataloader, test_dataloader)
+    test()
+    # save_without_ctc(test_model)
