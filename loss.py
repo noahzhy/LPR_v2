@@ -28,13 +28,11 @@ class ACELayer(Layer):
         self.label = None
         
     def call(self, label, inputs):
-        # bs, h, w, c = inputs.shape.as_list()
-        # T_ = h * w
-        bs, h, c = inputs.shape.as_list()
-        print(bs, h, c)
-        T_ = h * 1
+        bs, h, w, c = inputs.shape.as_list()
+        # print(inputs.shape.as_list())
+        T_ = h * w
 
-        inputs = tf.reshape(inputs, (-1, T_, c))
+        inputs = tf.reshape(inputs, (bs, T_, -1))
         inputs = inputs + 1e-10
 
         self.softmax = inputs

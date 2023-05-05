@@ -47,14 +47,21 @@ def decoder(file_path):
     return str2list(lp)
 
 
+
+
 if __name__ == "__main__":
-    f_path = "제주45_다1234_5678345.jpg"
-    print(decoder(f_path))
-    f_path = "Q45_다1234_356892.jpg"
-    print(decoder(f_path))
-    f_path = "제주45다_5462_20230115213242_14223844.jpg"
-    print(decoder(f_path))
-    f_path = "Q45다5462_20230115213242_14223844.jpg"
-    print(decoder(f_path))
-    f_path = "45다5462.jpg"
-    print(decoder(f_path))
+    # f_path = "제주45_다1234_5678345.jpg"
+    # print(decoder(f_path))
+    # f_path = "Q45_다1234_356892.jpg"
+    # print(decoder(f_path))
+    # f_path = "제주45다_5462_20230115213242_14223844.jpg"
+    # print(decoder(f_path))
+    # f_path = "Q45다5462_20230115213242_14223844.jpg"
+    # print(decoder(f_path))
+    # f_path = "45다5462.jpg"
+    # print(decoder(f_path))
+
+
+
+
+    pass

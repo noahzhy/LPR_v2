@@ -19,7 +19,9 @@ MAX_LABEL_LEN = 8
 
 CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
+print(CHARS_DICT)
 DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
+print(DECODE_DICT)
 # South Korea city
 koreaCity = {
     '서울': 'A', '부산': 'B', '대구': 'C', '인천': 'D',
@@ -60,7 +62,7 @@ def decoder(file_path):
             break
         lp += i
 
-    return str2list(lp)
+    return np.array(str2list(lp))
 
 
 # open image via path and keep Green channel only
@@ -155,7 +157,7 @@ def path_to_label(path):
 # input: batch_size, images, labels
 # output: batch_images, batch_labels
 class LPGenerate(Sequence):
-    def __init__(self, batch_size, dir_path="data", target_size=(48, 96), shuffle=True, sample_num=5000):
+    def __init__(self, batch_size, dir_path="data", target_size=(64, 128), shuffle=True, sample_num=5000):
         self.batch_size = batch_size
         self.images = glob.glob(dir_path + '/*.*')
         if sample_num != -1:
@@ -178,27 +180,33 @@ class LPGenerate(Sequence):
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, batches):
-        # swap height and width
-        width, height = self.target_size
+        height, width = self.target_size
         X = np.empty((self.batch_size, *(height, width), 1))
-        Y = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
+        # CTC loss
+        C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
+        # ACE loss
+        A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
         for i, img_path in enumerate(batches):
-            img = open_image(img_path, channel='G')
-            img = create_image(img, height, width)
-            img = img.rotate(270, expand=True)
+            img = open_image(img_path, channel='L')
+            img = create_image(img, width=width, height=height)
 
             # # binarize image via openCV
             # img = np.array(img)
             # img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
-            label = decoder(file_path=img_path)
-            if len(label) > MAX_LABEL_LEN:
-                print("label length is over than max length: ", label, img_path)
-            X[i,] = np.expand_dims(img, axis=-1) / 255.0
-            Y[i,][:len(label)] = np.array(label)
+            c_labels = decoder(file_path=img_path)
+            if len(c_labels) > MAX_LABEL_LEN:
+                print("label length is over than max length: ", c_labels, img_path)
 
-        return [X, Y], Y
+            for j, c in enumerate(c_labels):
+                A[i, c+1] += 1
+
+            X[i,] = np.expand_dims(img, axis=-1) / 255.0
+            C[i,][:len(c_labels)] = c_labels
+            A[i,][0] = len(c_labels)
+
+        return [X, C, A], [C, A]
 
 
 if __name__ == "__main__":
