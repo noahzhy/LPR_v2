@@ -122,12 +122,12 @@ class TCN(tf.keras.Model):
         inputs = Input(shape=(self.seq_len, self.filters))
 
         shortcut = Conv1D(self.filters, 1, padding='same')(inputs)
-        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(inputs)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(inputs)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.05)(x)
 
-        x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.05)(x)
@@ -143,22 +143,6 @@ class TCN(tf.keras.Model):
         return x
 
 
-class Head(tf.keras.Model):
-    def __init__(self):
-        super(Head, self).__init__()
-        self.ctc = CTCLayer(name="ctc_loss")
-        self.ace = ACELayer(name="ace_loss")
-
-    def call(self,
-        ctc, ctc_labels,
-        # ace, ace_labels
-        ):
-        ctc_loss = self.ctc(ctc_labels, ctc)
-        # ace_loss = self.ace(ace_labels, ace)
-        # return ctc_loss + ace_loss * 5.0
-        return ctc_loss
-
-
 class TinyLPR(tf.keras.Model):
     def __init__(self, bs, shape, output_dim=86, tcn_ksize=2, tcn_blocks=2, train=True):
         super(TinyLPR, self).__init__()
@@ -170,9 +154,9 @@ class TinyLPR(tf.keras.Model):
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear")
         # 2x2 max pooling
-        self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
+        # self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
         # avg pooling
-        # self.pooling = AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')
+        self.pooling = AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')
         # tcn
         self.tcn = TCN(seq_len=32, filters=168, kernel_size=tcn_ksize, blocks=tcn_blocks)
         # out
@@ -181,11 +165,12 @@ class TinyLPR(tf.keras.Model):
             BatchNormalization(trainable=self.train),
             Activation('softmax'),
         ])
-        self.loss = CTCLayer(name="ctc_loss")
+        self.ctc_loss = CTCLayer(name="ctc_loss")
+        self.ace_loss = ACELayer(name="ace_loss")
         # inputs
         self.input_tensor = Input(shape=self.shape, dtype=tf.float32, batch_size=self.bs, name='input0')
-        # self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs, name='ace_label')
-        self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs, name='ctc_label')
+        self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs)
+        self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs)
         # dropout
         self.dropout = Dropout(0.2, trainable=self.train)
 
@@ -195,6 +180,8 @@ class TinyLPR(tf.keras.Model):
         c1 = self.pooling(c1)
         c3 = self.upsample(c3)
         f_map = tf.concat([c1, c2, c3], axis=-1)
+
+        ace = self.dense_softmax(tf.reshape(f_map, [self.bs, -1, 168]))
 
         x = tf.split(f_map, num_or_size_splits=2, axis=1)
         x = tf.concat(x, axis=2)
@@ -206,21 +193,18 @@ class TinyLPR(tf.keras.Model):
 
         x = self.dropout(x)
 
-        # # ACE loss
-        # ace = self.dense_softmax(x)
         # CTC loss
         ctc = self.dense_softmax(x)
 
         if self.train:
-            loss = self.loss(
-                self.ctc_label_tensor, ctc,
-                # ace, self.ace_label_tensor,
-            )
+            ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
+            ace_loss = self.ace_loss(self.ace_label_tensor, ace)
+    
+            loss = ctc_loss + ace_loss
             return Model(
                 inputs=[
                     self.input_tensor,
-                    self.ctc_label_tensor,
-                    # self.ace_label_tensor,
+                    [self.ctc_label_tensor, self.ace_label_tensor],
                 ],
                 outputs=loss
             )
@@ -241,8 +225,7 @@ if __name__ == '__main__':
         train=True,
     ).build(input_shape=[
         (bs, *input_shape),
-        (bs, MAX_LABEL_LENGTH),
-        # (bs, 86),
+        [(bs, MAX_LABEL_LENGTH), (bs, 86)],
     ])
     model.compile(
         optimizer=tf.keras.optimizers.Nadam(learning_rate=0.001),
@@ -253,19 +236,17 @@ if __name__ == '__main__':
     model.save("tinyLPR.h5")
 
     # inputs = tf.random.normal(shape=(1, *input_shape))
-    # ctc_labels = tf.random.uniform(shape=(1, MAX_LABEL_LENGTH), minval=0, maxval=85, dtype=tf.int64)
-    # ace_labels = tf.random.uniform(shape=(1, 86), minval=0, maxval=85, dtype=tf.int64)
     # loss = model(
-    #     [inputs, ctc_labels, ace_labels],
+    #     inputs,
     #     training=True,
     # )
     # print(loss)
 
-    # model = TinyLPR(
-    #     bs=bs,
-    #     shape=input_shape,
-    #     train=False,
-    # ).build(input_shape=(bs, *input_shape))
-    # model.summary()
-    # # save
-    # model.save("tinyLPR_deploy.h5")
+    model = TinyLPR(
+        bs=bs,
+        shape=input_shape,
+        train=False,
+    ).build(input_shape=(bs, *input_shape))
+    model.summary()
+    # save
+    model.save("tinyLPR_deploy.h5")

@@ -19,9 +19,7 @@ MAX_LABEL_LEN = 8
 
 CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
-print(CHARS_DICT)
 DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
-print(DECODE_DICT)
 # South Korea city
 koreaCity = {
     '서울': 'A', '부산': 'B', '대구': 'C', '인천': 'D',
@@ -185,7 +183,7 @@ class LPGenerate(Sequence):
         # CTC loss
         C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
         # ACE loss
-        # A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
+        A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
         for i, img_path in enumerate(batches):
             img = open_image(img_path, channel='L')
@@ -199,15 +197,17 @@ class LPGenerate(Sequence):
             if len(c_labels) > MAX_LABEL_LEN:
                 print("label length is over than max length: ", c_labels, img_path)
 
-            # for j, c in enumerate(c_labels):
-            #     A[i, c+1] += 1
+            for j, c in enumerate(c_labels):
+                A[i, c+1] += 1
 
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
             C[i,][:len(c_labels)] = c_labels
-            # A[i,][0] = len(c_labels)
+            A[i,][0] = len(c_labels)
+
+        Y = [C, A]
 
         # return [X, C, A], [C, A]
-        return [X, C], C
+        return [X, Y], Y
 
 
 if __name__ == "__main__":

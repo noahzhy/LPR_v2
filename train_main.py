@@ -101,7 +101,7 @@ def test():
     ).build(input_shape=[(BATCH_SIZE, *input_shape)])
 
     test_img, test_label = test_dataloader.__getitem__(0)
-    # test_label = test_label[0]
+    test_label = test_label[0]
 
     test_model.load_weights(filepath='best_model.h5')
 
@@ -163,5 +163,5 @@ def is_correct(string):
     return True
 if __name__ == '__main__':
     model.summary()
-    # train(model, train_dataloader, test_dataloader)
+    train(model, train_dataloader, test_dataloader)
     test()
