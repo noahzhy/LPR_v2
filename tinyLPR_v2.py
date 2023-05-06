@@ -9,7 +9,7 @@ from tensorflow.keras.applications import MobileNetV2, EfficientNetV2S, MobileNe
 from keras_flops import get_flops
 
 from net_flops import net_flops
-from ctc import CTCLayer
+from loss import CTCLayer, ACELayer
 
 
 MAX_LABEL_LEN = 8

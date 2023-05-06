@@ -185,7 +185,7 @@ class LPGenerate(Sequence):
         # CTC loss
         C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
         # ACE loss
-        A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
+        # A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
         for i, img_path in enumerate(batches):
             img = open_image(img_path, channel='L')
@@ -199,14 +199,15 @@ class LPGenerate(Sequence):
             if len(c_labels) > MAX_LABEL_LEN:
                 print("label length is over than max length: ", c_labels, img_path)
 
-            for j, c in enumerate(c_labels):
-                A[i, c+1] += 1
+            # for j, c in enumerate(c_labels):
+            #     A[i, c+1] += 1
 
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
             C[i,][:len(c_labels)] = c_labels
-            A[i,][0] = len(c_labels)
+            # A[i,][0] = len(c_labels)
 
-        return [X, C, A], [C, A]
+        # return [X, C, A], [C, A]
+        return [X, C], C
 
 
 if __name__ == "__main__":
@@ -214,12 +215,12 @@ if __name__ == "__main__":
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
         # print('%s, %s => %s' % (x['input_image'].shape, x['label'].shape, y.shape))
-        img_data, label_data = x
+        img_data, ctc_label_data = x
         # show image
         img = Image.fromarray(np.squeeze(img_data[0] * 255).astype(np.uint8))
         img.show()
 
-        print(img_data.shape)
-        print(label_data)
-        print(y)
+        # print(img_data.shape, ctc_label_data.shape, ace_label_data.shape)
+        print(ctc_label_data)
+        # print(ace_label_data)
         break

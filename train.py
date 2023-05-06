@@ -175,7 +175,6 @@ def is_correct(string):
     if string[-5].isdigit():
         return False
 
-
     return True
 
 
