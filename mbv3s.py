@@ -19,18 +19,21 @@ class BottleNeck(Layer):
             filters=exp_size,
             kernel_size=(1, 1),
             strides=1,
-            padding="same")
+            padding="same",
+            kernel_initializer='he_normal')
         self.bn1 = BatchNormalization()
         self.dwconv = DepthwiseConv2D(
             kernel_size=(k, k),
             strides=s,
-            padding="same")
+            padding="same",
+            kernel_initializer='he_normal')
         self.bn2 = BatchNormalization()
         self.conv2 = Conv2D(
             filters=out_size,
             kernel_size=(1, 1),
             strides=1,
-            padding="same")
+            padding="same",
+            kernel_initializer='he_normal')
         self.bn3 = BatchNormalization()
         self.linear = Activation(tf.keras.activations.linear)
 
@@ -103,17 +106,17 @@ class MobileNetV3Small(tf.keras.Model):
 
 
 class TCN(tf.keras.Model):
-    def __init__(self, seq_len, filters, kernel_size=2, blocks=3):
+    def __init__(self, seq_len, filters, kernel_size=2, blocks=2, train=False, **kwargs):
         super(TCN, self).__init__()
         self.seq_len = seq_len
         self.filters = filters
         self.kernel_size = kernel_size
         self.blocks = blocks
+        self.train = train
 
         # set up layers via blocks
         for i in range(self.blocks):
             setattr(self, f'block_{i}', self.ResBlock(i))
-        
 
     def ResBlock(self, factor):
         dilation_rate = 2 ** factor
@@ -121,16 +124,16 @@ class TCN(tf.keras.Model):
         # input
         inputs = Input(shape=(self.seq_len, self.filters))
 
-        shortcut = Conv1D(self.filters, 1, padding='same')(inputs)
-        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(inputs)
+        shortcut = Conv1D(self.filters, 1, padding='same', kernel_initializer='he_normal')(inputs)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(inputs)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05)(x)
+        x = SpatialDropout1D(0.05, trainable=self.train)(x)
 
-        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate)(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05)(x)
+        x = SpatialDropout1D(0.05, trainable=self.train)(x)
 
         x = add([x, shortcut])
         x = Activation('relu')(x)
@@ -153,24 +156,27 @@ class TinyLPR(tf.keras.Model):
         # backbone and merge layer
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear")
-        # 2x2 max pooling
-        # self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
-        # avg pooling
-        self.pooling = AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')
+        # # 2x2 max pooling
+        self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
         # tcn
-        self.tcn = TCN(seq_len=32, filters=168, kernel_size=tcn_ksize, blocks=tcn_blocks)
+        self.tcn = TCN(
+            seq_len=32,
+            filters=168,
+            kernel_size=tcn_ksize,
+            blocks=tcn_blocks,
+            train=self.train)
         # out
         self.dense_softmax = Sequential([
             Dense(self.output_dim),
             BatchNormalization(trainable=self.train),
             Activation('softmax'),
-        ])
+        ], name='dense_softmax')
         self.ctc_loss = CTCLayer(name="ctc_loss")
         self.ace_loss = ACELayer(name="ace_loss")
         # inputs
         self.input_tensor = Input(shape=self.shape, dtype=tf.float32, batch_size=self.bs, name='input0')
-        self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs)
-        self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs)
+        self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs, name='input_ace')
+        self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs, name='input_ctc')
         # dropout
         self.dropout = Dropout(0.2, trainable=self.train)
 
@@ -181,31 +187,26 @@ class TinyLPR(tf.keras.Model):
         c3 = self.upsample(c3)
         f_map = tf.concat([c1, c2, c3], axis=-1)
 
-        ace = self.dense_softmax(tf.reshape(f_map, [self.bs, -1, 168]))
-
         x = tf.split(f_map, num_or_size_splits=2, axis=1)
         x = tf.concat(x, axis=2)
         x = tf.reduce_mean(x, axis=1)
 
         shortcut = x
         x = self.tcn(x)
-        x = add([x, shortcut])
-
         x = self.dropout(x)
+        x = add([x, shortcut])
 
         # CTC loss
         ctc = self.dense_softmax(x)
+        ace = self.dense_softmax(x)
 
         if self.train:
             ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
             ace_loss = self.ace_loss(self.ace_label_tensor, ace)
-    
-            loss = ctc_loss + ace_loss
+
+            loss = ctc_loss + ace_loss*.1
             return Model(
-                inputs=[
-                    self.input_tensor,
-                    [self.ctc_label_tensor, self.ace_label_tensor],
-                ],
+                inputs=[self.input_tensor, self.ctc_label_tensor, self.ace_label_tensor],
                 outputs=loss
             )
         else:
@@ -224,8 +225,7 @@ if __name__ == '__main__':
         shape=input_shape,
         train=True,
     ).build(input_shape=[
-        (bs, *input_shape),
-        [(bs, MAX_LABEL_LENGTH), (bs, 86)],
+        (bs, *input_shape), (bs, MAX_LABEL_LENGTH), (bs, 86),
     ])
     model.compile(
         optimizer=tf.keras.optimizers.Nadam(learning_rate=0.001),
@@ -235,13 +235,6 @@ if __name__ == '__main__':
     # save
     model.save("tinyLPR.h5")
 
-    # inputs = tf.random.normal(shape=(1, *input_shape))
-    # loss = model(
-    #     inputs,
-    #     training=True,
-    # )
-    # print(loss)
-
     model = TinyLPR(
         bs=bs,
         shape=input_shape,
@@ -250,3 +243,8 @@ if __name__ == '__main__':
     model.summary()
     # save
     model.save("tinyLPR_deploy.h5")
+
+    flops = get_flops(model, 1)
+    # to mflops and keep 2 decimal places
+    flops = round(flops / 10.0 ** 6, 2)
+    print(f"FLOPS: {flops} MFLOPS")

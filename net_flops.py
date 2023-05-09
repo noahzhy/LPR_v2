@@ -137,9 +137,11 @@ def net_flops(model, table=False):
         if (table == True):
             print('%25s | %16s | %16s | %16s | %16s | %6s | %5.4f' % (
                 name, str(i_shape), str(o_shape), str(ks), str(filters), str(strides), flops))
+
     t_flops = t_flops / factor
+    macc = t_macc / factor
 
     print('\nTotal FLOPS (x 10^6): %10.8f\n' % (t_flops))
-    print('\nTotal MACCs: %10.8f\n' % (t_macc))
+    print('\nTotal MACCs (x 10^6): %10.8f\n' % (macc))
 
     return

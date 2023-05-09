@@ -18,9 +18,10 @@ from mbv3s import *
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
-BATCH_SIZE = 64
+BATCH_SIZE = 128
+# TRAIN_SAMPLE = 53568
 TRAIN_SAMPLE = 5000
-NUM_EPOCHS = 200
+NUM_EPOCHS = 100
 WARMUP_EPOCH = 10
 LEARNING_RATE = 5e-3
 
@@ -44,8 +45,8 @@ model = TinyLPR(
 ).build(input_shape=[
     (BATCH_SIZE, *input_shape),
     (BATCH_SIZE, MAX_LABEL_LENGTH),
-    (BATCH_SIZE, char_num+1),]
-)
+    (BATCH_SIZE, char_num+1),
+])
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -53,7 +54,6 @@ warm_up_lr = WarmUpCosineDecayScheduler(
     total_steps=total_steps,
     warmup_learning_rate=1e-6,
     warmup_steps=warmup_steps,
-    hold_base_rate_steps=5,
 )
 
 
@@ -106,12 +106,9 @@ def test():
     test_model.load_weights(filepath='best_model.h5')
 
     y_pred = test_model.predict(test_img[0])
-    shape = y_pred[:, 2:, :].shape
-    ctc_decode = tf.keras.backend.ctc_decode(
-        y_pred[:, 2:, :], input_length=np.ones(shape[0]) * shape[1]
-    )[0][0]
+    shape = y_pred.shape
+    ctc_decode = tf.keras.backend.ctc_decode(y_pred, input_length=np.ones(shape[0]) * shape[1])[0][0]
     out = tf.keras.backend.get_value(ctc_decode)[:, :MAX_LABEL_LEN]
-    print(out)
 
     correct = 0
     for i in range(BATCH_SIZE):
@@ -161,7 +158,9 @@ def is_correct(string):
         return False
 
     return True
+
+
 if __name__ == '__main__':
     model.summary()
-    train(model, train_dataloader, test_dataloader)
+    # train(model, train_dataloader, test_dataloader)
     test()

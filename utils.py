@@ -159,6 +159,8 @@ class LPGenerate(Sequence):
         self.batch_size = batch_size
         self.images = glob.glob(dir_path + '/*.*')
         if sample_num != -1:
+            # fix random seed
+            np.random.seed(0)
             self.images = np.random.choice(self.images, sample_num)
         self.target_size = target_size
         self.shuffle = shuffle

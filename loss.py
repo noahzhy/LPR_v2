@@ -26,7 +26,7 @@ class ACELayer(Layer):
         super(ACELayer, self).__init__(name=name, **kwargs)
         self.softmax = None
         self.label = None
-        
+
     def call(self, label, inputs):
         shape_len = len(inputs.shape)
 
