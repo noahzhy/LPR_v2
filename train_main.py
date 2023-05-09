@@ -23,7 +23,7 @@ TRAIN_SAMPLE = 59097
 # TRAIN_SAMPLE = 5000
 NUM_EPOCHS = 100
 WARMUP_EPOCH = 10
-LEARNING_RATE = 3e-3
+LEARNING_RATE = 3e-4
 
 input_shape = (64, 128, 1)
 char_num = 85
@@ -47,7 +47,7 @@ model = TinyLPR(
     (BATCH_SIZE, MAX_LABEL_LENGTH),
     (BATCH_SIZE, char_num+1),
 ])
-# model.load_weights('best_model.h5')
+model.load_weights('best_model.h5')
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -61,6 +61,7 @@ warm_up_lr = WarmUpCosineDecayScheduler(
 def train(model, train_data, val_data):
     model.compile(
         loss=lambda y_true, y_pred: y_pred,
+        # optimizer=RMSprop(learning_rate=LEARNING_RATE),
         optimizer=Adam(learning_rate=LEARNING_RATE),
     )
     callbacks_list = [
@@ -118,11 +119,12 @@ def test():
         # print(y_pred, label)
         if y_pred == label:
             correct += 1
+            print("√ {}, \t{}".format(label, y_pred))
         else:
             # if not is_correct(y_pred):
             #     correct += 1
             # else:
-                print("{}, \t{}".format(label, y_pred))
+                print("x {}, \t{}".format(label, y_pred))
 
     print(correct / BATCH_SIZE)
 

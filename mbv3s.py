@@ -128,12 +128,12 @@ class TCN(tf.keras.Model):
         x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(inputs)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05, trainable=self.train)(x)
+        x = SpatialDropout1D(0.1, trainable=self.train)(x)
 
         x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05, trainable=self.train)(x)
+        x = SpatialDropout1D(0.1, trainable=self.train)(x)
 
         x = add([x, shortcut])
         x = Activation('relu')(x)
@@ -177,7 +177,6 @@ class TinyLPR(tf.keras.Model):
         self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs, name='input_ace')
         self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs, name='input_ctc')
         # dropout
-        # self.dropout = Dropout(0.2, trainable=self.train)
         self.dropout = SpatialDropout1D(0.5, trainable=self.train)
 
     def build(self, input_shape):
@@ -204,7 +203,7 @@ class TinyLPR(tf.keras.Model):
             ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
             ace_loss = self.ace_loss(self.ace_label_tensor, ace)
 
-            loss = ctc_loss + ace_loss*.05
+            loss = ctc_loss + ace_loss*.1
             return Model(
                 inputs=[self.input_tensor, self.ctc_label_tensor, self.ace_label_tensor],
                 outputs=loss
