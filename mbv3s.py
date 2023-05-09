@@ -6,7 +6,7 @@ from keras_flops import get_flops
 from loss import CTCLayer, ACELayer
 
 
-MAX_LABEL_LENGTH = 8
+MAX_LABEL_LENGTH = 9
 
 
 class BottleNeck(Layer):
@@ -156,7 +156,6 @@ class TinyLPR(tf.keras.Model):
         # backbone and merge layer
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear")
-        # # 2x2 max pooling
         self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
         # tcn
         self.tcn = TCN(
@@ -178,7 +177,8 @@ class TinyLPR(tf.keras.Model):
         self.ace_label_tensor = Input(shape=(self.output_dim,), dtype=tf.int64, batch_size=self.bs, name='input_ace')
         self.ctc_label_tensor = Input(shape=(MAX_LABEL_LENGTH,), dtype=tf.int64, batch_size=self.bs, name='input_ctc')
         # dropout
-        self.dropout = Dropout(0.2, trainable=self.train)
+        # self.dropout = Dropout(0.2, trainable=self.train)
+        self.dropout = SpatialDropout1D(0.5, trainable=self.train)
 
     def build(self, input_shape):
         # backbone
@@ -204,7 +204,7 @@ class TinyLPR(tf.keras.Model):
             ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
             ace_loss = self.ace_loss(self.ace_label_tensor, ace)
 
-            loss = ctc_loss + ace_loss*.1
+            loss = ctc_loss + ace_loss*.05
             return Model(
                 inputs=[self.input_tensor, self.ctc_label_tensor, self.ace_label_tensor],
                 outputs=loss

@@ -19,15 +19,15 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
 BATCH_SIZE = 128
-# TRAIN_SAMPLE = 53568
-TRAIN_SAMPLE = 5000
+TRAIN_SAMPLE = 59097
+# TRAIN_SAMPLE = 5000
 NUM_EPOCHS = 100
 WARMUP_EPOCH = 10
-LEARNING_RATE = 5e-3
+LEARNING_RATE = 3e-3
 
 input_shape = (64, 128, 1)
 char_num = 85
-train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE)
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=-1)
 test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test')
 # blocks = 2
 
@@ -47,6 +47,7 @@ model = TinyLPR(
     (BATCH_SIZE, MAX_LABEL_LENGTH),
     (BATCH_SIZE, char_num+1),
 ])
+# model.load_weights('best_model.h5')
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(

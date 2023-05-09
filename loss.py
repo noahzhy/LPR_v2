@@ -8,7 +8,7 @@ class CTCLayer(Layer):
     def __init__(self, name=None, **kwargs):
         super(CTCLayer, self).__init__(name=name, **kwargs)
         self.loss_fn = K.ctc_batch_cost
-        self.alpha = 0.5
+        self.alpha = 1.0
         self.gamma = 2.0
 
     def call(self, y_true, y_pred):

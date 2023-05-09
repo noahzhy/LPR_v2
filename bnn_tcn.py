@@ -17,7 +17,7 @@ kwargs = dict(
     kernel_constraint="weight_clip",
 )
 
-MAX_LABEL_LEN = 8
+MAX_LABEL_LEN = 9
 
 
 class LearnableBias(Layer):

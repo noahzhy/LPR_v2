@@ -15,7 +15,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import *
 
 
-MAX_LABEL_LEN = 8
+MAX_LABEL_LEN = 9
 
 CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
@@ -155,7 +155,7 @@ def path_to_label(path):
 # input: batch_size, images, labels
 # output: batch_images, batch_labels
 class LPGenerate(Sequence):
-    def __init__(self, batch_size, dir_path="data", target_size=(64, 128), shuffle=True, sample_num=5000):
+    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000):
         self.batch_size = batch_size
         self.images = glob.glob(dir_path + '/*.*')
         if sample_num != -1:
@@ -203,6 +203,7 @@ class LPGenerate(Sequence):
                 A[i, c+1] += 1
 
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
+            # print(img_path, c_labels)
             C[i,][:len(c_labels)] = c_labels
             A[i,][0] = len(c_labels)
 

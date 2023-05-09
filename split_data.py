@@ -27,16 +27,16 @@ def move_images(images):
 
 
 if __name__ == '__main__':
-    # # split data
-    # train_images, test_images = split_data('E:/projects/LPR_v2/data', train_ratio=0.9)
-    # # move images
-    # move_images(test_images)
+    # split data
+    train_images, test_images = split_data('E:/projects/LPR_v2/train', train_ratio=0.9)
+    # move images
+    move_images(test_images)
 
-    # list all images in data folder
-    images = glob.glob('E:/projects/LPR_v2/data/*.*')
-    for image in images:
-        # which name is included '물' in image name
-        if '물' in image:
-            # move image
-            print(image)
+    # # list all images in data folder
+    # images = glob.glob('E:/projects/LPR_v2/data/*.*')
+    # for image in images:
+    #     # which name is included '물' in image name
+    #     if '물' in image:
+    #         # move image
+    #         print(image)
     

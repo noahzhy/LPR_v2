@@ -18,7 +18,7 @@ from ctc import CTCLayer
 from cosine import *
 
 
-MAX_LABEL_LEN = 8
+MAX_LABEL_LEN = 9
 
 # CHARS = "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호바사아자배abcdefghijklmnopqABCDEFGHIJKLMNOPQ "
 CHARS = """0A가B호8C저D우9E나F고G허H주I다J노K거L배M라N도O너P구Q마a로b더c누d바e모f러g두h사i보j머k루l아m소n버o무p자q오1서2부3하4조5어6수7 """

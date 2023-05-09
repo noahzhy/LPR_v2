@@ -12,7 +12,7 @@ from net_flops import net_flops
 from ctc import CTCLayer, ACELayer
 
 
-MAX_LABEL_LEN = 8
+MAX_LABEL_LEN = 9
 
 class TinyLPR(Model):
     def __init__(self,

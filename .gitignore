@@ -1,4 +1,4 @@
-data/*
+train/*
 test/*
 evl/*
 logs/*
