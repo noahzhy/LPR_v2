@@ -6,7 +6,7 @@ from keras_flops import get_flops
 from loss import CTCLayer, ACELayer
 
 
-MAX_LABEL_LENGTH = 9
+MAX_LABEL_LENGTH = 10
 
 
 class BottleNeck(Layer):

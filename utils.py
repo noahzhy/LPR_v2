@@ -15,7 +15,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import *
 
 
-MAX_LABEL_LEN = 9
+MAX_LABEL_LEN = 10
 
 CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
@@ -37,6 +37,10 @@ def str2list(string):
         # korean city
         korea_city_letter = koreaCity[string[:2]]
         string = korea_city_letter + string[2:]
+
+    # if string include space
+    if string.find(' ') != -1:
+        string = " " + string
 
     for char in string:
         # if not in CHARS_DICT, append space
@@ -86,7 +90,6 @@ def create_image(raw_img, width=96, height=48):
         (width, int(raw_img.size[1] * width / raw_img.size[0])),
         Image.ANTIALIAS
     )
-    # paste the raw image to the target image at top
     img.paste(raw_img, (0, 0))
     return img
 
@@ -209,7 +212,6 @@ class LPGenerate(Sequence):
 
         Y = [C, A]
 
-        # return [X, C, A], [C, A]
         return [X, Y], Y
 
 
@@ -217,13 +219,9 @@ if __name__ == "__main__":
     dataLoader = LPGenerate(5, shuffle=True)
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
-        # print('%s, %s => %s' % (x['input_image'].shape, x['label'].shape, y.shape))
-        img_data, ctc_label_data = x
+        img_data, label_data = x
         # show image
         img = Image.fromarray(np.squeeze(img_data[0] * 255).astype(np.uint8))
         img.show()
-
-        # print(img_data.shape, ctc_label_data.shape, ace_label_data.shape)
-        print(ctc_label_data)
-        # print(ace_label_data)
+        print(label_data)
         break

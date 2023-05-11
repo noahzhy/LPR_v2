@@ -13,23 +13,24 @@ from keras.optimizers import *
 
 from cosine import *
 from utils import *
-from mbv3s import *
+from mbv3s import TinyLPR
+
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
-BATCH_SIZE = 128
-TRAIN_SAMPLE = 59097
+MAX_LABEL_LENGTH = 10
+BATCH_SIZE = 256
+TRAIN_SAMPLE = 58420
 # TRAIN_SAMPLE = 5000
 NUM_EPOCHS = 100
-WARMUP_EPOCH = 10
+WARMUP_EPOCH = 0
 LEARNING_RATE = 3e-4
 
 input_shape = (64, 128, 1)
 char_num = 85
-train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=-1)
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE)
 test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test')
-# blocks = 2
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
 warmup_batches = WARMUP_EPOCH * epoch_step
@@ -61,7 +62,6 @@ warm_up_lr = WarmUpCosineDecayScheduler(
 def train(model, train_data, val_data):
     model.compile(
         loss=lambda y_true, y_pred: y_pred,
-        # optimizer=RMSprop(learning_rate=LEARNING_RATE),
         optimizer=Adam(learning_rate=LEARNING_RATE),
     )
     callbacks_list = [
@@ -113,23 +113,44 @@ def test():
     out = tf.keras.backend.get_value(ctc_decode)[:, :MAX_LABEL_LEN]
 
     correct = 0
+    single_correct = 0
+    double_correct = 0
+    sum_single = 0
+    sum_double = 0
+    format_err = 0
     for i in range(BATCH_SIZE):
         y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
         label = "".join([DECODE_DICT[x] for x in test_label[i] if x != 86])
-        # print(y_pred, label)
+
+        if label.find(' ') != -1:
+            sum_double += 1
+        else:
+            sum_single += 1
+
         if y_pred == label:
             correct += 1
-            print("√ {}, \t{}".format(label, y_pred))
-        else:
-            # if not is_correct(y_pred):
-            #     correct += 1
-            # else:
-                print("x {}, \t{}".format(label, y_pred))
+            # if label with space
+            if label.find(' ') != -1:
+                double_correct += 1
+            else:
+                single_correct += 1
 
-    print(correct / BATCH_SIZE)
+        else:
+            if not is_correct(y_pred):
+                format_err += 1
+            else:
+                print("Error: {}, \t{}".format(label, y_pred))
+
+    # keep 2 decimal places in percentage
+    print("Accuracy: {:.2f}%".format(correct / BATCH_SIZE * 100))
+    print("Single Accuracy: {:.2f}%".format(single_correct / sum_single * 100))
+    print("Double Accuracy: {:.2f}%".format(double_correct / sum_double * 100))
+    print("Format Error: {:.2f}%".format(format_err / BATCH_SIZE * 100))
 
 
 def is_correct(string):
+    # remove space
+    string = string.replace(' ', '')
     if len(string) < 7:
         return False
 
