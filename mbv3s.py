@@ -224,7 +224,7 @@ if __name__ == '__main__':
         shape=input_shape,
         train=True,
     ).build(input_shape=[
-        (bs, *input_shape), (bs, MAX_LABEL_LENGTH), (bs, 86),
+        (bs, *input_shape), (bs, MAX_LABEL_LENGTH), (bs, 85),
     ])
     model.compile(
         optimizer=tf.keras.optimizers.Nadam(learning_rate=0.001),

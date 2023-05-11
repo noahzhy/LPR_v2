@@ -45,8 +45,8 @@ def str2list(string):
     for char in string:
         # if not in CHARS_DICT, append space
         if char not in CHARS_DICT.keys():
-            print('\nchar not in CHARS_DICT: ', char)
-            res.append(CHARS_DICT[' '])
+            # print('\nchar not in CHARS_DICT: ', char)
+            res.append(len(CHARS_DICT))
         else:
             res.append(CHARS_DICT[char])
     return res
@@ -109,11 +109,6 @@ def to_label(text):
     for c in text:
         ints.append(CHARS_DICT[c])
     return ints
-
-# text = "제주79바4470"
-# print(to_label(text))
-# print(CHARS_DICT['-'])
-# quit()
 
 
 # function string_to_ints
@@ -186,7 +181,7 @@ class LPGenerate(Sequence):
         height, width = self.target_size
         X = np.empty((self.batch_size, *(height, width), 1))
         # CTC loss
-        C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS)+1, dtype=int)
+        C = np.zeros((self.batch_size, MAX_LABEL_LEN), dtype=int)
         # ACE loss
         A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
@@ -203,15 +198,18 @@ class LPGenerate(Sequence):
                 print("label length is over than max length: ", c_labels, img_path)
 
             for j, c in enumerate(c_labels):
+                # continue if c is not in CHARS
+                if c == len(CHARS): continue
                 A[i, c+1] += 1
 
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
             # print(img_path, c_labels)
             C[i,][:len(c_labels)] = c_labels
-            A[i,][0] = len(c_labels)
+            # remove 85 from c_labels
+            tmp = [c for c in c_labels if c != 0]
+            A[i,][0] = len(tmp)
 
         Y = [C, A]
-
         return [X, Y], Y
 
 

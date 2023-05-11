@@ -21,10 +21,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 # training config
 MAX_LABEL_LENGTH = 10
 BATCH_SIZE = 256
-TRAIN_SAMPLE = 58420
+TRAIN_SAMPLE = 68500
 # TRAIN_SAMPLE = 5000
 NUM_EPOCHS = 100
-WARMUP_EPOCH = 0
+WARMUP_EPOCH = 10
 LEARNING_RATE = 3e-4
 
 input_shape = (64, 128, 1)
@@ -120,7 +120,10 @@ def test():
     format_err = 0
     for i in range(BATCH_SIZE):
         y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
-        label = "".join([DECODE_DICT[x] for x in test_label[i] if x != 86])
+        label = "".join([DECODE_DICT[x] for x in test_label[i] if x != len(DECODE_DICT)])
+
+        label = label.strip()
+        y_pred = y_pred.strip()
 
         if label.find(' ') != -1:
             sum_double += 1
