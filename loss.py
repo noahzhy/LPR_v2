@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.layers import Input, Dense, Lambda, Layer
+from itertools import groupby
 
 
 class CTCLayer(Layer):
@@ -9,7 +10,7 @@ class CTCLayer(Layer):
         super(CTCLayer, self).__init__(name=name, **kwargs)
         self.loss_fn = K.ctc_batch_cost
         self.alpha = 1.0
-        self.gamma = 2.0
+        self.gamma = 5.0
 
     def call(self, y_true, y_pred):
         input_length = K.tile([[K.shape(y_pred)[1]]], [K.shape(y_pred)[0], 1])
@@ -54,11 +55,16 @@ class ACELayer(Layer):
         loss = (-tf.reduce_sum(mul)) / bs
         return loss
 
-    def decode_batch(self):
+    def decode_batch(self, inputs):
+        self.softmax = inputs
         out_best = tf.argmax(self.softmax, 2).numpy()
         pre_result = [0]*self.bs
 
         for j in range(self.bs):
             pre_result[j] = out_best[j][out_best[j]!=0].astype(np.int32)
+
+        # using groupby to remove duplicate
+        for i in range(self.bs):
+            pre_result[i] = [k for k, g in groupby(pre_result[i])]
 
         return pre_result

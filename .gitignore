@@ -1,5 +1,7 @@
 train/*
 test/*
 evl/*
+double_train/*
+double_test/*
 logs/*
 __pycache__/*.pyc

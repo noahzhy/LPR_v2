@@ -9,6 +9,50 @@ from loss import CTCLayer, ACELayer
 MAX_LABEL_LENGTH = 10
 
 
+def dwconv_bn_relu(filters, kernel_size, strides, padding="same", train=False):
+    return Sequential([
+        DepthwiseConv2D(kernel_size=kernel_size, strides=strides, padding=padding, use_bias=False),
+        BatchNormalization(trainable=train),
+        Activation(tf.nn.relu6),
+
+        Conv2D(filters, (1, 1), padding='same', use_bias=False),
+        BatchNormalization(trainable=train),
+        Activation(tf.nn.relu6)
+    ])
+
+# LRASPP
+class LRASPP(Model):
+    def __init__(self, out_dim, train=False, **kwargs):
+        super(LRASPP, self).__init__(**kwargs)
+        self.out_dim = out_dim
+        self.train = train
+        self.f1 = Sequential([
+            Conv2D(out_dim, (1, 1), padding='same', use_bias=False),
+            BatchNormalization(trainable=train),
+            # relu
+            Activation(tf.nn.relu)
+        ])
+
+        self.f2 = Sequential([
+            AveragePooling2D(pool_size=(8, 8)),
+            Conv2D(out_dim, (1, 1), padding='same'),
+            # sigmoid
+            Activation(tf.nn.sigmoid)
+        ])
+
+        # 8x upsample
+        self.upsample = UpSampling2D(size=(8, 8), interpolation='bilinear')
+
+    def call(self, inputs, training=None, **kwargs):
+        f1 = self.f1(inputs)
+        f2 = self.f2(inputs)
+        # upsample 8x
+        f2 = self.upsample(f2)
+        # multi
+        x = tf.multiply(f1, f2)
+        return x
+
+
 class BottleNeck(Layer):
     def __init__(self, in_size, exp_size, out_size, s, k=3):
         super(BottleNeck, self).__init__()
@@ -20,20 +64,23 @@ class BottleNeck(Layer):
             kernel_size=(1, 1),
             strides=1,
             padding="same",
-            kernel_initializer='he_normal')
+            kernel_initializer='he_normal',
+            use_bias=False)
         self.bn1 = BatchNormalization()
         self.dwconv = DepthwiseConv2D(
             kernel_size=(k, k),
             strides=s,
             padding="same",
-            kernel_initializer='he_normal')
+            kernel_initializer='he_normal',
+            use_bias=False)
         self.bn2 = BatchNormalization()
         self.conv2 = Conv2D(
             filters=out_size,
             kernel_size=(1, 1),
             strides=1,
             padding="same",
-            kernel_initializer='he_normal')
+            kernel_initializer='he_normal',
+            use_bias=False)
         self.bn3 = BatchNormalization()
         self.linear = Activation(tf.keras.activations.linear)
 
@@ -48,7 +95,7 @@ class BottleNeck(Layer):
 
         x = self.conv2(x)
         x = self.bn3(x, training=training)
-        x = self.linear(x)
+        # x = self.linear(x)
 
         if self.stride == 1 and self.in_size == self.out_size:
             x = add([x, inputs])
@@ -63,9 +110,10 @@ class MobileNetV3Small(tf.keras.Model):
             filters=16,
             kernel_size=(3, 3),
             strides=2,
-            padding="same")
-        self.act1 = Activation(tf.nn.relu6)
+            padding="same",
+            use_bias=False)
         self.bn1 = BatchNormalization()
+        self.act1 = Activation(tf.nn.relu6)
         self.bneck1 = BottleNeck(in_size=16, exp_size=16, out_size=16, s=2, k=3)
         self.bneck2 = BottleNeck(in_size=16, exp_size=72, out_size=24, s=1, k=3)
         self.bneck3 = BottleNeck(in_size=24, exp_size=88, out_size=24, s=1, k=3)
@@ -77,8 +125,8 @@ class MobileNetV3Small(tf.keras.Model):
         self.bneck8 = BottleNeck(in_size=48, exp_size=144, out_size=48, s=1, k=5)
 
         self.bneck9 = BottleNeck(in_size=48, exp_size=288, out_size=96, s=2, k=5)
-        self.bneck10 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
-        self.bneck11 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
+        # self.bneck10 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
+        # self.bneck11 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
 
     def call(self, inputs, training=None, mask=None):
         x = self.conv1(inputs)
@@ -98,8 +146,8 @@ class MobileNetV3Small(tf.keras.Model):
         c2 = x
 
         x = self.bneck9(x, training=training)
-        x = self.bneck10(x, training=training)
-        x = self.bneck11(x, training=training)
+        # x = self.bneck10(x, training=training)
+        # x = self.bneck11(x, training=training)
         c3 = x
 
         return c1, c2, c3
@@ -125,13 +173,13 @@ class TCN(tf.keras.Model):
         inputs = Input(shape=(self.seq_len, self.filters))
 
         shortcut = Conv1D(self.filters, 1, padding='same', kernel_initializer='he_normal')(inputs)
-        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(inputs)
-        x = BatchNormalization()(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal', use_bias=False)(inputs)
+        x = LayerNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.1, trainable=self.train)(x)
 
-        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal')(x)
-        x = BatchNormalization()(x)
+        x = Conv1D(self.filters, self.kernel_size, padding='causal', dilation_rate=dilation_rate, kernel_initializer='he_normal', use_bias=False)(x)
+        x = LayerNormalization()(x)
         x = Activation('relu')(x)
         x = SpatialDropout1D(0.1, trainable=self.train)(x)
 
@@ -157,9 +205,17 @@ class TinyLPR(tf.keras.Model):
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear")
         self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
+        # seg head
+        self.seg_head = Sequential([
+            LRASPP(128),
+            Conv2D(self.output_dim, 1, padding='same', kernel_initializer='he_normal'),
+            # 8x upsample
+            UpSampling2D(size=(8, 8), interpolation="bilinear"),
+        ], name='seg_head')
+
         # tcn
         self.tcn = TCN(
-            seq_len=32,
+            seq_len=128,
             filters=168,
             kernel_size=tcn_ksize,
             blocks=tcn_blocks,
@@ -184,20 +240,24 @@ class TinyLPR(tf.keras.Model):
         c1, c2, c3 = self.model(self.input_tensor, training=self.train)
         c1 = self.pooling(c1)
         c3 = self.upsample(c3)
-        f_map = tf.concat([c1, c2, c3], axis=-1)
+        f_map = tf.concat([c1, c2, c3], axis=-1) # (bs, 8, 16, 168)
+        
+        # seg head
+        ace = self.seg_head(f_map)
+        print(ace.shape)
 
-        x = tf.split(f_map, num_or_size_splits=2, axis=1)
-        x = tf.concat(x, axis=2)
-        x = tf.reduce_mean(x, axis=1)
+        # ace = self.dense_softmax(x)
 
-        shortcut = x
-        x = self.tcn(x)
-        x = self.dropout(x)
-        x = add([x, shortcut])
+        x = tf.reshape(f_map, (-1, 128, 168))
+
+        # shortcut = x
+        # x = self.tcn(x)
+        # x = self.dropout(x)
+        # x = add([x, shortcut])
 
         # CTC loss
         ctc = self.dense_softmax(x)
-        ace = self.dense_softmax(x)
+        # ace = self.dense_softmax(x)
 
         if self.train:
             ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
@@ -224,12 +284,8 @@ if __name__ == '__main__':
         shape=input_shape,
         train=True,
     ).build(input_shape=[
-        (bs, *input_shape), (bs, MAX_LABEL_LENGTH), (bs, 85),
+        (bs, *input_shape), (bs, MAX_LABEL_LENGTH), (bs, *input_shape)
     ])
-    model.compile(
-        optimizer=tf.keras.optimizers.Nadam(learning_rate=0.001),
-        loss=lambda y_true, y_pred: y_pred
-    )
     model.summary()
     # save
     model.save("tinyLPR.h5")
@@ -242,7 +298,7 @@ if __name__ == '__main__':
     model.summary()
     # save
     model.save("tinyLPR_deploy.h5")
-
+    # get flops
     flops = get_flops(model, 1)
     # to mflops and keep 2 decimal places
     flops = round(flops / 10.0 ** 6, 2)

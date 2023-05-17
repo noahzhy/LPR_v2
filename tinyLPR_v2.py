@@ -12,7 +12,7 @@ from net_flops import net_flops
 from loss import CTCLayer, ACELayer
 
 
-MAX_LABEL_LEN = 9
+MAX_LABEL_LEN = 10
 
 class TinyLPR(Model):
     def __init__(self,
@@ -67,14 +67,14 @@ class TinyLPR(Model):
 
         inputs = Input(shape=(self.seq_len, self.filters), name='input_tcn')
         x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(inputs)
-        x = BatchNormalization()(x)
+        x = LayerNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05)(x)
+        x = SpatialDropout1D(0.1)(x)
 
         x = Conv1D(self.filters, self.kernel_size, padding='same', dilation_rate=dilation_rate)(x)
-        x = BatchNormalization()(x)
+        x = LayerNormalization()(x)
         x = Activation('relu')(x)
-        x = SpatialDropout1D(0.05)(x)
+        x = SpatialDropout1D(0.1)(x)
 
         shortcut = Conv1D(self.filters, 1, padding='same')(inputs)
 

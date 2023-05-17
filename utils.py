@@ -13,11 +13,12 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 from tensorflow.keras.utils import *
+from keras.preprocessing.image import ImageDataGenerator
 
 
 MAX_LABEL_LEN = 10
 
-CHARS = """ 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"""
+CHARS = " 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
 DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
 # South Korea city
@@ -68,7 +69,7 @@ def decoder(file_path):
 
 
 # open image via path and keep Green channel only
-def open_image(path, channel='G'):
+def open_image(path, channel='L'):
     img = Image.open(path)
     img = img.convert('RGB')
     r, g, b = img.split()
@@ -155,11 +156,12 @@ def path_to_label(path):
 class LPGenerate(Sequence):
     def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000):
         self.batch_size = batch_size
-        self.images = glob.glob(dir_path + '/*.*')
+        self.total_images = glob.glob(dir_path + '/*.jpg')
+        self.sample_num = sample_num
         if sample_num != -1:
             # fix random seed
             np.random.seed(0)
-            self.images = np.random.choice(self.images, sample_num)
+            self.images = np.random.choice(self.total_images, sample_num)
         self.target_size = target_size
         self.shuffle = shuffle
         self.on_epoch_end()
@@ -175,13 +177,14 @@ class LPGenerate(Sequence):
     def on_epoch_end(self):
         self.indexes = np.arange(len(self.images))
         if self.shuffle == True:
+            self.images = np.random.choice(self.total_images, self.sample_num)
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, batches):
         height, width = self.target_size
         X = np.empty((self.batch_size, *(height, width), 1))
         # CTC loss
-        C = np.zeros((self.batch_size, MAX_LABEL_LEN), dtype=int)
+        C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS), dtype=int)
         # ACE loss
         A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
@@ -214,7 +217,7 @@ class LPGenerate(Sequence):
 
 
 if __name__ == "__main__":
-    dataLoader = LPGenerate(5, shuffle=True)
+    dataLoader = LPGenerate(5, shuffle=True, dir_path="double_train")
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
         img_data, label_data = x

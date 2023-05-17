@@ -64,14 +64,16 @@ class TinyLPR(tf.keras.Model):
             activation='relu',
         )
         # get layers
-        output = nn.get_layer('stack3_block7_output').output
-        self.model = Model(inputs=nn.input, outputs=output)
+        c1 = nn.get_layer('stack1_block1_output').output
+        c2 = nn.get_layer('stack2_block2_output').output
+        c3 = nn.get_layer('stack3_block7_output').output
+        self.model = Model(inputs=nn.input, outputs=[c1, c2, c3], name='fasterNet')
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear")
         self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same')
         # tcn
         self.tcn = TCN(
-            seq_len=16,
-            filters=160,
+            seq_len=128,
+            filters=280,
             kernel_size=tcn_ksize,
             blocks=tcn_blocks,
             train=self.train)
@@ -92,11 +94,18 @@ class TinyLPR(tf.keras.Model):
 
     def build(self, input_shape):
         # backbone
-        f_map = self.model(self.input_tensor)
+        c1, c2, c3 = self.model(self.input_tensor)
+        # c1
+        c1 = self.pooling(c1)
+        c3 = self.upsample(c3)
 
-        x = tf.split(f_map, num_or_size_splits=2, axis=1)
-        x = tf.concat(x, axis=2)
-        x = tf.reduce_mean(x, axis=1)
+        # cat
+        f_map = concatenate([c1, c2, c3], axis=-1)
+
+        # bn
+        x = BatchNormalization(trainable=self.train)(f_map)
+
+        x = tf.reshape(x, (-1, 128, 280))
 
         shortcut = x
         x = self.tcn(x)

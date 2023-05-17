@@ -13,24 +13,27 @@ from keras.optimizers import *
 
 from cosine import *
 from utils import *
-from mbv3s import TinyLPR
+# from mbv3s import TinyLPR
+from fasterNetv1 import TinyLPR
 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
 MAX_LABEL_LENGTH = 10
-BATCH_SIZE = 256
-TRAIN_SAMPLE = 68500
-# TRAIN_SAMPLE = 5000
+BATCH_SIZE = 128
+# TRAIN_SAMPLE = 94799
+# TEST_SAMPLE = 23699
+TRAIN_SAMPLE = 8000
+TEST_SAMPLE = 800
 NUM_EPOCHS = 100
 WARMUP_EPOCH = 10
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 5e-3
 
 input_shape = (64, 128, 1)
 char_num = 85
-train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE)
-test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test')
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE, dir_path='train', target_size=input_shape[:2])
+test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, sample_num=TEST_SAMPLE, dir_path='evl', target_size=input_shape[:2])
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
 warmup_batches = WARMUP_EPOCH * epoch_step
@@ -48,7 +51,8 @@ model = TinyLPR(
     (BATCH_SIZE, MAX_LABEL_LENGTH),
     (BATCH_SIZE, char_num+1),
 ])
-model.load_weights('best_model.h5')
+# model.load_weights('best_model_6923.h5', by_name=True, skip_mismatch=True)
+model.load_weights('best_model.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -59,7 +63,7 @@ warm_up_lr = WarmUpCosineDecayScheduler(
 )
 
 
-def train(model, train_data, val_data):
+def train(model, train_data, test_data):
     model.compile(
         loss=lambda y_true, y_pred: y_pred,
         optimizer=Adam(learning_rate=LEARNING_RATE),
@@ -90,11 +94,13 @@ def train(model, train_data, val_data):
         batch_size=BATCH_SIZE,
         epochs=NUM_EPOCHS,
         callbacks=callbacks_list,
-        validation_data=val_data,
+        validation_data=test_data,
     )
 
 
-def test():
+def evl():
+    BATCH_SIZE = 800
+    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='evl', target_size=input_shape[:2])
     test_model = TinyLPR(
         bs=BATCH_SIZE,
         shape=input_shape,
@@ -102,7 +108,7 @@ def test():
         train=False,
     ).build(input_shape=[(BATCH_SIZE, *input_shape)])
 
-    test_img, test_label = test_dataloader.__getitem__(0)
+    test_img, test_label = evl_dataloader.__getitem__(0)
     test_label = test_label[0]
 
     test_model.load_weights(filepath='best_model.h5')
@@ -115,8 +121,8 @@ def test():
     correct = 0
     single_correct = 0
     double_correct = 0
-    sum_single = 0
-    sum_double = 0
+    sum_single = 1e-8
+    sum_double = 1e-8
     format_err = 0
     for i in range(BATCH_SIZE):
         y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
@@ -148,7 +154,7 @@ def test():
     print("Accuracy: {:.2f}%".format(correct / BATCH_SIZE * 100))
     print("Single Accuracy: {:.2f}%".format(single_correct / sum_single * 100))
     print("Double Accuracy: {:.2f}%".format(double_correct / sum_double * 100))
-    print("Format Error: {:.2f}%".format(format_err / BATCH_SIZE * 100))
+    print("Final Accuracy: {:.2f}%".format(correct / (BATCH_SIZE-format_err) * 100))
 
 
 def is_correct(string):
@@ -189,5 +195,5 @@ def is_correct(string):
 
 if __name__ == '__main__':
     model.summary()
-    # train(model, train_dataloader, test_dataloader)
-    test()
+    train(model, train_dataloader, test_dataloader)
+    evl()
