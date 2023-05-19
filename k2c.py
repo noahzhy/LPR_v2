@@ -36,7 +36,6 @@ for i, shift in enumerate(shifts):
     arr[:, i] = np.roll(arr[:, i], shift*2)
 
 
-
 print(arr)
 # reshpae to 1d array，and convert to list
 _list = arr.reshape(-1).tolist()

@@ -4,28 +4,41 @@ import numpy as np
 from PIL import Image
 
 
-# list all images in a directory, (.png, .jpg)
-def list_images(dir_path):
+# list all images in a directory, (.png, .jpg) as pairs
+def list_all_images(dir_path):
     images = []
-    for ext in ('*.png', '*.jpg'):
-        images.extend(glob.glob(os.path.join(dir_path, ext)))
+    for ext in ['jpg']:
+        images.extend(glob.glob(os.path.join(dir_path, '*.{}'.format(ext))))
+    return images
 
-    # count the number of images which name with space character
-    count = 0
-    for img in images:
-        if ' ' in img:
-            count += 1
-            # move the image to a specific directory
-            os.rename(img, os.path.join('double', os.path.basename(img)))
 
-    # print total number of images and number of images which name with space character
-    print(f"Total number of images: {len(images)}")
-    print(f"Number of images which name with space character: {count}")
-    return count
+# divide the images into train and test
+def divide_train_test(images, train_ratio=0.9):
+    # shuffle the images
+    np.random.shuffle(images)
+    # divide the images into train and test
+    train_images = images[:int(len(images) * train_ratio)]
+    test_images = images[int(len(images) * train_ratio):]
+    return train_images, test_images
+
+
+# move divided images to train and test dir
+def move_images(images, dst_dir):
+    for image in images:
+        # move
+        os.rename(image, os.path.join(dst_dir, os.path.basename(image)))
+        # find the same name png file
+        png_file = image[:-4] + '.png'
+        if os.path.exists(png_file):
+            os.rename(png_file, os.path.join(dst_dir, os.path.basename(png_file)))
 
 
 # main
 if __name__ == '__main__':
-    count = list_images('train')
-    x = list_images('test')
-    print(f"Total number of images: {count + x}")
+    # list all images in a directory, (.png, .jpg) as pairs
+    images = list_all_images('total')
+    # divide the images into train and test
+    train_images, test_images = divide_train_test(images, train_ratio=0.9)
+    # move divided images to train and test dir
+    move_images(train_images, 'train')
+    move_images(test_images, 'test')

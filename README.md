@@ -63,3 +63,13 @@ Single Accuracy: 67.40%
 Double Accuracy: 34.57%
 Final Accuracy: 71.47%
 
+## Experiment 5
+
+remove TCN model, only CNN
+
+Accuracy: 94.00%
+Single Accuracy: 94.99%
+Double Accuracy: 88.43%
+Final Accuracy: 96.16%
+
+

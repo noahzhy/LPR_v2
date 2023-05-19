@@ -21,6 +21,8 @@ MAX_LABEL_LEN = 10
 CHARS = " 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
 DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
+# print('CHARS_DICT: ', CHARS_DICT)
+# print('DECODE_DICT: ', DECODE_DICT)
 # South Korea city
 koreaCity = {
     '서울': 'A', '부산': 'B', '대구': 'C', '인천': 'D',
@@ -85,11 +87,15 @@ def open_image(path, channel='L'):
 
 # create a new image with black background
 def create_image(raw_img, width=96, height=48):
+    # to image if raw_img is numpy array
+    if type(raw_img) == np.ndarray:
+        raw_img = Image.fromarray(raw_img)
+
     img = Image.new('L', (width, height), (0))
     # resize the raw image to fit the target image width, and keep the ratio
     raw_img = raw_img.resize(
         (width, int(raw_img.size[1] * width / raw_img.size[0])),
-        Image.ANTIALIAS
+        Image.Resampling.LANCZOS
     )
     img.paste(raw_img, (0, 0))
     return img
@@ -154,7 +160,7 @@ def path_to_label(path):
 # input: batch_size, images, labels
 # output: batch_images, batch_labels
 class LPGenerate(Sequence):
-    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000):
+    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000, evl_mode=False):
         self.batch_size = batch_size
         self.total_images = glob.glob(dir_path + '/*.jpg')
         self.sample_num = sample_num
@@ -162,9 +168,23 @@ class LPGenerate(Sequence):
             # fix random seed
             np.random.seed(0)
             self.images = np.random.choice(self.total_images, sample_num)
+        else:
+            self.images = self.total_images
         self.target_size = target_size
         self.shuffle = shuffle
+        self.evl_mode = evl_mode
         self.on_epoch_end()
+
+    def find_matching_mask(self, img_path):
+        # find matching mask path
+        mask_path = img_path.replace('.jpg', '.png')
+        # read as numpy array
+        mask = np.array(Image.open(mask_path).convert('L'))
+        # to binary if x > 128 else 0
+        mask = np.where(mask > 128, 1, 0)
+        h, w = self.target_size
+        mask = create_image(mask, width=w, height=h)
+        return mask
 
     def __len__(self):
         return int(np.floor(len(self.images) / self.batch_size))
@@ -177,52 +197,50 @@ class LPGenerate(Sequence):
     def on_epoch_end(self):
         self.indexes = np.arange(len(self.images))
         if self.shuffle == True:
-            self.images = np.random.choice(self.total_images, self.sample_num)
             np.random.shuffle(self.indexes)
+            if self.sample_num != -1:
+                self.images = np.random.choice(self.total_images, self.sample_num)
 
     def __data_generation(self, batches):
         height, width = self.target_size
         X = np.empty((self.batch_size, *(height, width), 1))
+        M = np.zeros((self.batch_size, *(height, width), 1))
         # CTC loss
         C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS), dtype=int)
-        # ACE loss
-        A = np.zeros((self.batch_size, len(CHARS)+1), dtype=int)
 
         for i, img_path in enumerate(batches):
             img = open_image(img_path, channel='L')
             img = create_image(img, width=width, height=height)
 
-            # # binarize image via openCV
-            # img = np.array(img)
-            # img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            if not self.evl_mode:
+                mask = self.find_matching_mask(img_path)
 
             c_labels = decoder(file_path=img_path)
             if len(c_labels) > MAX_LABEL_LEN:
                 print("label length is over than max length: ", c_labels, img_path)
 
-            for j, c in enumerate(c_labels):
-                # continue if c is not in CHARS
-                if c == len(CHARS): continue
-                A[i, c+1] += 1
-
             X[i,] = np.expand_dims(img, axis=-1) / 255.0
             # print(img_path, c_labels)
             C[i,][:len(c_labels)] = c_labels
-            # remove 85 from c_labels
-            tmp = [c for c in c_labels if c != 0]
-            A[i,][0] = len(tmp)
+            if not self.evl_mode:
+                M[i,] = np.expand_dims(mask, axis=-1)
 
-        Y = [C, A]
+        Y = [C, M]
         return [X, Y], Y
 
 
 if __name__ == "__main__":
-    dataLoader = LPGenerate(5, shuffle=True, dir_path="double_train")
+    dataLoader = LPGenerate(5, shuffle=True, dir_path="train", sample_num=100)
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
-        img_data, label_data = x
-        # show image
-        img = Image.fromarray(np.squeeze(img_data[0] * 255).astype(np.uint8))
-        img.show()
-        print(label_data)
+        img_data, m = x
+        ctc, mask = m
+        # using matplotlib to show image and mask
+        fig = plt.figure(figsize=(10, 10))
+        for j in range(0, 5):
+            ax = fig.add_subplot(5, 2, 2 * j + 1)
+            ax.imshow(np.squeeze(img_data[j]), cmap='gray')
+            ax = fig.add_subplot(5, 2, 2 * j + 2)
+            ax.imshow(np.squeeze(mask[j]), cmap='gray')
+        plt.show()
         break

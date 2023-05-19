@@ -13,27 +13,27 @@ from keras.optimizers import *
 
 from cosine import *
 from utils import *
-# from mbv3s import TinyLPR
-from fasterNetv1 import TinyLPR
+from mbv3s import TinyLPR
 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # training config
 MAX_LABEL_LENGTH = 10
-BATCH_SIZE = 128
-# TRAIN_SAMPLE = 94799
-# TEST_SAMPLE = 23699
-TRAIN_SAMPLE = 8000
-TEST_SAMPLE = 800
+BATCH_SIZE = 256
+
+TRAIN_SAMPLE = 189131
+TEST_SAMPLE = 21015
+# TRAIN_SAMPLE = 10000
+# TEST_SAMPLE = 1000
 NUM_EPOCHS = 100
 WARMUP_EPOCH = 10
-LEARNING_RATE = 5e-3
+LEARNING_RATE = 3e-4
 
 input_shape = (64, 128, 1)
 char_num = 85
-train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE, dir_path='train', target_size=input_shape[:2])
-test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, sample_num=TEST_SAMPLE, dir_path='evl', target_size=input_shape[:2])
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=-1, dir_path='train', target_size=input_shape[:2])
+test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, sample_num=-1, dir_path='test', target_size=input_shape[:2])
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
 warmup_batches = WARMUP_EPOCH * epoch_step
@@ -42,17 +42,17 @@ warmup_steps = WARMUP_EPOCH * epoch_step
 
 
 model = TinyLPR(
-    bs=BATCH_SIZE,
     shape=input_shape,
     output_dim=char_num+1,
     train=True,
 ).build(input_shape=[
     (BATCH_SIZE, *input_shape),
     (BATCH_SIZE, MAX_LABEL_LENGTH),
-    (BATCH_SIZE, char_num+1),
+    (BATCH_SIZE, *input_shape),
 ])
-# model.load_weights('best_model_6923.h5', by_name=True, skip_mismatch=True)
-model.load_weights('best_model.h5', by_name=True, skip_mismatch=True)
+
+# model.load_weights('best_model_v3.h5', by_name=True, skip_mismatch=True)
+model.load_weights('best_model_final.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -100,33 +100,35 @@ def train(model, train_data, test_data):
 
 def evl():
     BATCH_SIZE = 800
-    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='evl', target_size=input_shape[:2])
+    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='train', target_size=input_shape[:2], evl_mode=True)
     test_model = TinyLPR(
-        bs=BATCH_SIZE,
         shape=input_shape,
         output_dim=char_num+1,
         train=False,
-    ).build(input_shape=[(BATCH_SIZE, *input_shape)])
+    ).build(input_shape=(BATCH_SIZE, *input_shape))
 
     test_img, test_label = evl_dataloader.__getitem__(0)
     test_label = test_label[0]
 
+    # test_model.load_weights(filepath='best_model.h5', by_name=True)
     test_model.load_weights(filepath='best_model.h5')
 
     y_pred = test_model.predict(test_img[0])
     shape = y_pred.shape
     ctc_decode = tf.keras.backend.ctc_decode(y_pred, input_length=np.ones(shape[0]) * shape[1])[0][0]
     out = tf.keras.backend.get_value(ctc_decode)[:, :MAX_LABEL_LEN]
+    print(out)
 
     correct = 0
     single_correct = 0
     double_correct = 0
     sum_single = 1e-8
     sum_double = 1e-8
-    format_err = 0
+    format_err = 1e-8
     for i in range(BATCH_SIZE):
         y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
         label = "".join([DECODE_DICT[x] for x in test_label[i] if x != len(DECODE_DICT)])
+        # print("Label: {}, \tPrediction: {}".format(label, y_pred))
 
         label = label.strip()
         y_pred = y_pred.strip()
@@ -145,7 +147,7 @@ def evl():
                 single_correct += 1
 
         else:
-            if not is_correct(y_pred):
+            if not is_valid(y_pred):
                 format_err += 1
             else:
                 print("Error: {}, \t{}".format(label, y_pred))
@@ -157,40 +159,11 @@ def evl():
     print("Final Accuracy: {:.2f}%".format(correct / (BATCH_SIZE-format_err) * 100))
 
 
-def is_correct(string):
+def is_valid(license_plate):
     # remove space
-    string = string.replace(' ', '')
-    if len(string) < 7:
-        return False
-
-    # if every char is number
-    if string.isdigit():
-        return False
-
-    # if last four char is number
-    if not string[-4:].isdigit():
-        return False
-
-    kor_count = 0
-    num_count = 0
-    for char in string:
-        if char.isdigit():
-            num_count += 1
-        # if char is not number and not alphabet
-        elif not char.isalpha():
-            kor_count += 1
-
-    if kor_count > 1:
-        return False
-
-    if not (num_count == 6 or num_count == 7):
-        return False
-
-    # if first char is alphabet
-    if string[-5].isdigit():
-        return False
-
-    return True
+    license_plate = license_plate.replace(' ', '')
+    regex = re.compile(r'^([가-힣]{2}\d{2}|\d{2,3})[가-힣]{1}\d{4}$')
+    return regex.match(license_plate) is not None
 
 
 if __name__ == '__main__':

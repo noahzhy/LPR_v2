@@ -77,7 +77,7 @@ def divide_green_yellow_images(folder_path):
 
 
 # Specify the folder path containing the image files
-folder_path = 'double'
+folder_path = 'train'
 
 # Divide the green and yellow images in the folder
 divide_green_yellow_images(folder_path)

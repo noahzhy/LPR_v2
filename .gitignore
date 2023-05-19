@@ -1,7 +1,6 @@
 train/*
 test/*
 evl/*
-double_train/*
-double_test/*
 logs/*
+total/*
 __pycache__/*.pyc
