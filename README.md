@@ -65,11 +65,16 @@ Final Accuracy: 71.47%
 
 ## Experiment 5
 
-remove TCN model, only CNN
+remove TCN model, only CNN, 先行预览版 for auto IT
 
-Accuracy: 94.00%
-Single Accuracy: 94.99%
-Double Accuracy: 88.43%
-Final Accuracy: 96.16%
+减少不必要的结构, 改用 separable conv 连接 4x 的downsample
 
+Accuracy: 86.12%
+Single Accuracy: 90.87%
+Double Accuracy: 67.88%
+Final Accuracy: 88.45%
 
+Accuracy: 94.50%
+Single Accuracy: 94.66%
+Double Accuracy: 93.75%
+Final Accuracy: 96.31%

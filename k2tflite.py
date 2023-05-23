@@ -59,7 +59,7 @@ def saved_model2pb(
         train=False,
     ).build(input_shape=[(1, 64, 128, 1)])
 
-    model.load_weights('best_model_final.h5', by_name=True)
+    model.load_weights('best_model_v2.h5', by_name=True)
 
     # # model = keras.models.load_model(
     # #     saved_model_dir,

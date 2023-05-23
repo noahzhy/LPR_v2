@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps, ImageFile
 import tensorflow as tf
 from tensorflow.keras.utils import *
 from keras.preprocessing.image import ImageDataGenerator
@@ -156,23 +156,78 @@ def path_to_label(path):
     return to_label(label)
 
 
+@staticmethod
+def return_raw(img):
+    return img
+
+@staticmethod
+def randomColor(image):
+    """
+    对图像进行颜色抖动
+    :param image: PIL的图像image
+    :return: 有颜色色差的图像image
+    """
+    random_factor = np.random.randint(0, 31) / 10.  # 随机因子
+    color_image = ImageEnhance.Color(image).enhance(random_factor)  # 调整图像的饱和度
+    random_factor = np.random.randint(10, 21) / 10.  # 随机因子
+    brightness_image = ImageEnhance.Brightness(color_image).enhance(random_factor)  # 调整图像的亮度
+    random_factor = np.random.randint(10, 21) / 10.  # 随机因1子
+    contrast_image = ImageEnhance.Contrast(brightness_image).enhance(random_factor)  # 调整图像对比度
+    random_factor = np.random.randint(0, 31) / 10.  # 随机因子
+    return ImageEnhance.Sharpness(contrast_image).enhance(random_factor)  # 调整图像锐度
+
+@staticmethod
+def randomGaussian(image, mean=0.2, sigma=0.3):
+    """
+        对图像进行高斯噪声处理
+    :param image:
+    :return:
+    """
+
+    def gaussianNoisy(im, mean=0.2, sigma=0.3):
+        """
+        对图像做高斯噪音处理
+        :param im: 单通道图像
+        :param mean: 偏移量
+        :param sigma: 标准差
+        :return:
+        """
+        for _i in range(len(im)):
+            im[_i] += random.gauss(mean, sigma)
+        return im
+
+    # 将图像转化成数组
+    img = np.array(image)
+    img.flags.writeable = True  # 将数组改为读写模式
+    width, height = img.shape[:2]
+    img_r = gaussianNoisy(img[:, :, 0].flatten(), mean, sigma)
+    img_g = gaussianNoisy(img[:, :, 1].flatten(), mean, sigma)
+    img_b = gaussianNoisy(img[:, :, 2].flatten(), mean, sigma)
+    img[:, :, 0] = img_r.reshape([width, height])
+    img[:, :, 1] = img_g.reshape([width, height])
+    img[:, :, 2] = img_b.reshape([width, height])
+    return Image.fromarray(np.uint8(img))
+
+
 # function to generate batch
 # input: batch_size, images, labels
 # output: batch_images, batch_labels
 class LPGenerate(Sequence):
-    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000, evl_mode=False):
+    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000, evl_mode=False, aug=False):
         self.batch_size = batch_size
         self.total_images = glob.glob(dir_path + '/*.jpg')
         self.sample_num = sample_num
-        if sample_num != -1:
+        self.shuffle = shuffle
+        if not self.shuffle:
             # fix random seed
             np.random.seed(0)
+        if sample_num != -1:
             self.images = np.random.choice(self.total_images, sample_num)
         else:
             self.images = self.total_images
         self.target_size = target_size
-        self.shuffle = shuffle
         self.evl_mode = evl_mode
+        self.aug = aug
         self.on_epoch_end()
 
     def find_matching_mask(self, img_path):
@@ -195,11 +250,12 @@ class LPGenerate(Sequence):
         return X, Y
 
     def on_epoch_end(self):
-        self.indexes = np.arange(len(self.images))
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
+        if self.shuffle:
             if self.sample_num != -1:
                 self.images = np.random.choice(self.total_images, self.sample_num)
+            else:
+                np.random.shuffle(self.images)
+    
 
     def __data_generation(self, batches):
         height, width = self.target_size
@@ -209,7 +265,13 @@ class LPGenerate(Sequence):
         C = np.full((self.batch_size, MAX_LABEL_LEN), len(CHARS), dtype=int)
 
         for i, img_path in enumerate(batches):
-            img = open_image(img_path, channel='L')
+            img = Image.open(img_path).convert('RGB')
+            if self.aug:
+                ops = [return_raw, randomGaussian, randomColor]
+                op = random.choice(ops)
+                img = op(img)
+
+            img = img.convert('L')
             img = create_image(img, width=width, height=height)
 
             if not self.evl_mode:
@@ -230,7 +292,7 @@ class LPGenerate(Sequence):
 
 
 if __name__ == "__main__":
-    dataLoader = LPGenerate(5, shuffle=True, dir_path="train", sample_num=100)
+    dataLoader = LPGenerate(5, shuffle=True, dir_path="train", sample_num=100, aug=True)
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
         img_data, m = x

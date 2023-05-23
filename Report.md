@@ -42,7 +42,6 @@ Some tips:
 3. The accuracy of segmentation improves from xxx to xxx, its better than xxx.
 4. The synthesis data improves the accuracy of double-row license plates from xxx to xxx.
 
-
 ## Conclusion
 
 这里放一堆废话，总结一下这个项目的意义，以及这个项目的应用前景。

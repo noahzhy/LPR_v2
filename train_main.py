@@ -1,5 +1,6 @@
 import os
 import glob
+import shutil
 
 import numpy as np
 from PIL import Image
@@ -18,41 +19,48 @@ from mbv3s import TinyLPR
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
+# del logs dir if exists
+if os.path.exists('./logs'):
+    shutil.rmtree('./logs')
+
 # training config
 MAX_LABEL_LENGTH = 10
-BATCH_SIZE = 256
+BATCH_SIZE = 64
 
-TRAIN_SAMPLE = 189131
-TEST_SAMPLE = 21015
-# TRAIN_SAMPLE = 10000
-# TEST_SAMPLE = 1000
-NUM_EPOCHS = 100
-WARMUP_EPOCH = 10
-LEARNING_RATE = 3e-4
+# TRAIN_SAMPLE = 189131
+# TEST_SAMPLE = 21015
+TRAIN_SAMPLE = 10000
+TEST_SAMPLE = 1000
+NUM_EPOCHS = 200
+WARMUP_EPOCH = 0
+LEARNING_RATE = 1e-11
 
 input_shape = (64, 128, 1)
 char_num = 85
-train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=-1, dir_path='train', target_size=input_shape[:2])
-test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, sample_num=-1, dir_path='test', target_size=input_shape[:2])
+train_dataloader = LPGenerate(BATCH_SIZE, shuffle=True, sample_num=TRAIN_SAMPLE, dir_path='train', target_size=input_shape[:2])
+test_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, sample_num=TEST_SAMPLE, dir_path='test', target_size=input_shape[:2])
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
 warmup_batches = WARMUP_EPOCH * epoch_step
 total_steps = NUM_EPOCHS * epoch_step
 warmup_steps = WARMUP_EPOCH * epoch_step
 
+# metrics_keys = "val_ctc_loss"
+metrics_keys = "val_loss"
 
 model = TinyLPR(
     shape=input_shape,
     output_dim=char_num+1,
     train=True,
+    with_mask=(metrics_keys=="val_ctc_loss"),
 ).build(input_shape=[
     (BATCH_SIZE, *input_shape),
     (BATCH_SIZE, MAX_LABEL_LENGTH),
     (BATCH_SIZE, *input_shape),
 ])
 
-# model.load_weights('best_model_v3.h5', by_name=True, skip_mismatch=True)
-model.load_weights('best_model_final.h5', by_name=True, skip_mismatch=True)
+model.load_weights('best_model.h5', by_name=True, skip_mismatch=True)
+# model.load_weights('best_model_final.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -66,16 +74,20 @@ warm_up_lr = WarmUpCosineDecayScheduler(
 def train(model, train_data, test_data):
     model.compile(
         loss=lambda y_true, y_pred: y_pred,
-        optimizer=Adam(learning_rate=LEARNING_RATE),
+        # optimizer=Adam(learning_rate=LEARNING_RATE),
+        # Nadam
+        # optimizer=Nadam(learning_rate=LEARNING_RATE),
+        # sdg
+        optimizer=SGD(learning_rate=LEARNING_RATE, momentum=0.9, nesterov=True),
     )
     callbacks_list = [
         ModelCheckpoint(
             filepath='best_model.h5',
-            monitor='val_loss',
+            monitor=metrics_keys,
             save_best_only=True,
         ),
         EarlyStopping(
-            monitor='val_loss',
+            monitor=metrics_keys,
             patience=50,
             verbose=0,
             mode='auto'
@@ -100,24 +112,24 @@ def train(model, train_data, test_data):
 
 def evl():
     BATCH_SIZE = 800
-    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='train', target_size=input_shape[:2], evl_mode=True)
+    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test', target_size=input_shape[:2], evl_mode=True)
     test_model = TinyLPR(
         shape=input_shape,
         output_dim=char_num+1,
         train=False,
+        with_mask=False,
     ).build(input_shape=(BATCH_SIZE, *input_shape))
 
     test_img, test_label = evl_dataloader.__getitem__(0)
     test_label = test_label[0]
 
-    # test_model.load_weights(filepath='best_model.h5', by_name=True)
     test_model.load_weights(filepath='best_model.h5')
+    # test_model.load_weights(filepath='best_model_final.h5')
 
     y_pred = test_model.predict(test_img[0])
     shape = y_pred.shape
     ctc_decode = tf.keras.backend.ctc_decode(y_pred, input_length=np.ones(shape[0]) * shape[1])[0][0]
     out = tf.keras.backend.get_value(ctc_decode)[:, :MAX_LABEL_LEN]
-    print(out)
 
     correct = 0
     single_correct = 0
@@ -168,5 +180,5 @@ def is_valid(license_plate):
 
 if __name__ == '__main__':
     model.summary()
-    train(model, train_dataloader, test_dataloader)
+    # train(model, train_dataloader, test_dataloader)
     evl()
