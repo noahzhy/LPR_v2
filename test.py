@@ -1,39 +1,41 @@
 import numpy as np
 import tensorflow as tf
-from keras import backend as K
-from keras.layers import Input, Dense, Lambda, Layer
-from itertools import groupby
+
+from PIL import Image
 
 
-# tf.compat.v1.disable_eager_execution()
+class CRNN(object):
+    CTC_INVALID_INDEX = -1
 
-class CenterLossLayer(Layer):
-    def __init__(self, alpha=0.5, num_classes=10, name=None, **kwargs):
-        super(CenterLossLayer, self).__init__(name=name, **kwargs)
+    def __init__(self, cfg, alpha=0.5, num_classes=10):
+        self.inputs = tf.compat.v1.placeholder(
+            tf.float32,
+            [None, 64, 128, 1],
+            name="inputs")
+        self.cfg = cfg
+        # SparseTensor required by ctc_loss op
+        self.labels = tf.sparse_placeholder(tf.int32, name="labels")
+        # single char labels required by center_loss op
+        self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None], name="bat_labels")
+        # sequence length
+        self.len_labels = tf.compat.v1.placeholder(tf.int32, name="len_labels")
+        # nums of chars in each sample, used to filter sample to do center loss
+        self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None], name="char_num")
+        # char pos: the positions of chars
+        # 因为 tensorflow 对在循环中长度改变的张量会报错，所以在此作为 placeholder 传入
+        self.char_pos_init = tf.compat.v1.placeholder(tf.int32, shape=[None, 2], name='char_pos')
+        # 1d array of size [batch_size]
+
         self.alpha = alpha
         self.num_classes = num_classes
 
-    def get_config(self):
-        config = super(CenterLossLayer, self).get_config()
-        config.update({"alpha": self.alpha, "num_classes": self.num_classes})
-        return config
-
     def call(self, logits, cnn_reshaped, label):
         cnn_out = cnn_reshaped
-        bs, f, c = cnn_out.shape.as_list() # bs, 128, 128
-        bs = 1
-
-
-        # single char labels required by center_loss op
-        # self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None], name="bat_labels")
-        self.bat_labels = np.zeros(shape=(bs,), dtype=np.int32)
-        # nums of chars in each sample, used to filter sample to do center loss
-        # self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None], name="char_num")
-        self.char_num = np.zeros(shape=(bs,), dtype=np.int32)
-        # char pos: the positions of chars
-        # 因为 tensorflow 对在循环中长度改变的张量会报错，所以在此作为 placeholder 传入
-        # self.char_pos_init = tf.compat.v1.placeholder(tf.int32, shape=[None, 2], name='char_pos')
-        self.char_pos_init = np.zeros(shape=(bs, 2), dtype=np.int32)
+        cnn_output_shape = tf.shape(cnn_out) # bs, 128, 128
+        print('tf.shape(cnn_out):',tf.shape(cnn_out))
+        bs, f, c = cnn_output_shape[0], cnn_output_shape[1], cnn_output_shape[2]
+        self.batch_size = bs
+        self.seq_len = tf.ones([batch_size], tf.int32) * c
 
         # Reshape to the shape lstm needed. [batch_size, max_time, ..]
         # [batch_size, f, c] -> [batch_size, c, f]
@@ -62,7 +64,7 @@ class CenterLossLayer(Layer):
 
         return self.center_loss
 
-    def get_center_loss(self, features, labels):
+    def get_center_loss(self, features, labels, alpha, num_classes):
         """获取center loss及center的更新op
         Arguments:
             features: Tensor,表征样本特征,一般使用某个fc层的输出,shape应该为[batch_size, feature_length].
@@ -78,17 +80,17 @@ class CenterLossLayer(Layer):
         # 获取特征的维数，例如256维
         len_features = features.get_shape()[1]
 
-        # 建立一个Variable,shape为[num_classes, len_features]，用于存储整个网络的样本中心
-        # centers = tf.compat.v1.get_variable(
-        #     'centers',
-        #     [num_classes, len_features],
-        #     dtype=tf.float32,
-        #     initializer=tf.constant_initializer(0),
-        #     trainable=False
-        # )
-        centers = np.zeros(shape=(self.num_classes, len_features), dtype=np.float32)
+        # 建立一个Variable,shape为[num_classes, len_features]，用于存储整个网络的样本中心，
+        # 设置trainable=False是因为样本中心不是由梯度进行更新的
+        centers = tf.compat.v1.get_variable(
+            'centers',
+            [num_classes, len_features],
+            dtype=tf.float32,
+            initializer=tf.constant_initializer(0),
+            trainable=False
+        )
         # 将label展开为一维的，输入如果已经是一维的，则该动作其实无必要
-        # labels = tf.reshape(labels, [-1])
+        labels = tf.reshape(labels, [-1])
         print('tf.shape(labels):', tf.shape(labels))
 
         # 构建label
@@ -106,9 +108,9 @@ class CenterLossLayer(Layer):
         appear_times = tf.reshape(appear_times, [-1, 1])
 
         diff = diff / tf.cast((1 + appear_times), tf.float32)
-        diff = self.alpha * diff
+        diff = alpha * diff
 
-        centers_update_op = tf.compat.v1.scatter_sub(centers, labels, diff)
+        centers_update_op = tf.scatter_sub(centers, labels, diff)
 
         with tf.control_dependencies([centers_update_op]):
             loss = tf.identity(loss)
@@ -136,15 +138,15 @@ class CenterLossLayer(Layer):
 
             # 判断预测出的字符数和 gt 是否一致，如果不一致则忽略此样本
             char_seg_num = tf.shape(char_pos)[0]
-
-            if not tf.equal(char_seg_num, char_num[i]):
-                # tf.print('切出的字符数量与真实值不同，忽略此样本：',
-                #          label[char_total:char_total + char_num[i]], char_seg_num, 'vs', char_num[i], summarize=-1)
-                label = tf.concat([label[:char_total], label[char_total + char_num[i]:]], axis=0)
-                i = tf.add(i, 1)
-                continue
-            else:
-                char_total = tf.add(char_total, char_num[i])
+            if self.is_training:
+                if not tf.equal(char_seg_num, char_num[i]):
+                    # tf.print('切出的字符数量与真实值不同，忽略此样本：',
+                    #          label[char_total:char_total + char_num[i]], char_seg_num, 'vs', char_num[i], summarize=-1)
+                    label = tf.concat([label[:char_total], label[char_total + char_num[i]:]], axis=0)
+                    i = tf.add(i, 1)
+                    continue
+                else:
+                    char_total = tf.add(char_total, char_num[i])
 
             # 在seg中添加 batch 序号标识，方便后续获取 feature
             batch_i = char_pos[:, :1]
@@ -206,68 +208,3 @@ class CenterLossLayer(Layer):
             # 根据字符位置得到字符的 embedding
             self.embedding = self.get_features(self.char_pos, embedding)
 
-
-
-class FocalLossLayer(Layer):
-    def __init__(self, name=None, **kwargs):
-        super(FocalLossLayer, self).__init__(name=name, **kwargs)
-        self.loss_fn = K.ctc_batch_cost
-        self.alpha = 0.2
-        self.gamma = 5.0
-
-    def call(self, y_true, y_pred):
-        input_length = K.tile([[K.shape(y_pred)[1]]], [K.shape(y_pred)[0], 1])
-        label_length = K.tile([[K.shape(y_true)[1]]], [K.shape(y_true)[0], 1])
-        loss = self.loss_fn(y_true, y_pred, input_length, label_length)
-        p = tf.exp(-loss)
-        focal_ctc_loss = tf.multiply(tf.multiply(self.alpha, tf.pow((1 - p), self.gamma)), loss)
-        loss = tf.reduce_mean(focal_ctc_loss)
-        return loss
-
-
-class ACELayer(Layer):
-    def __init__(self, name=None, **kwargs):
-        super(ACELayer, self).__init__(name=name, **kwargs)
-        self.softmax = None
-        self.label = None
-
-    def call(self, label, inputs):
-        shape_len = len(inputs.shape)
-
-        if shape_len == 3:
-            bs, h, c = inputs.shape.as_list()
-            T_ = h
-        elif shape_len == 4:
-            bs, h, w, c = inputs.shape.as_list()
-            T_ = h * w
-
-        inputs = tf.reshape(inputs, (bs, T_, -1))
-        inputs = inputs + 1e-10
-
-        self.softmax = inputs
-        nums, dist = label[:,0], label[:,1:]
-        nums = T_ - nums
-
-        inputs = tf.reduce_sum(inputs, axis=1)
-        inputs = inputs / T_
-        label = label / T_
-
-        # convert to float32
-        label = tf.cast(label, tf.float32)
-        mul = tf.math.log(inputs) * label
-        loss = (-tf.reduce_sum(mul)) / bs
-        return loss
-
-    def decode_batch(self, inputs):
-        self.softmax = inputs
-        out_best = tf.argmax(self.softmax, 2).numpy()
-        pre_result = [0]*self.bs
-
-        for j in range(self.bs):
-            pre_result[j] = out_best[j][out_best[j]!=0].astype(np.int32)
-
-        # using groupby to remove duplicate
-        for i in range(self.bs):
-            pre_result[i] = [k for k, g in groupby(pre_result[i])]
-
-        return pre_result

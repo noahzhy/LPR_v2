@@ -78,3 +78,29 @@ Accuracy: 94.50%
 Single Accuracy: 94.66%
 Double Accuracy: 93.75%
 Final Accuracy: 96.31%
+
+## Experiment 6
+
+lraspp 连接 1/16 的 downsample 的 cnn
+
+Accuracy: 87.62%
+Single Accuracy: 90.87%
+Double Accuracy: 75.15%
+Final Accuracy: 89.53%
+
+Accuracy: 94.00%
+Single Accuracy: 94.97%
+Double Accuracy: 89.58%
+Final Accuracy: 95.80%
+
+## Experiment 7
+
+连接更多的浅层特征
+
+Single Accuracy: 90.08%
+Double Accuracy: 64.24%
+Final Accuracy: 87.26%
+
+## Experiment 8
+
+

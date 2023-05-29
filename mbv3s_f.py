@@ -16,7 +16,7 @@ class BCE_loss(Layer):
         super(BCE_loss, self).__init__(name=name)
 
     def call(self, y_true, y_pred, **kwargs):
-        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(y_true, y_pred)
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=False)(y_true, y_pred)
         return loss
 
 
@@ -29,16 +29,12 @@ def LRASPP(inputs, out_dim, train=False):
         Activation(tf.nn.relu, name="lraspp_relu_f1")
     ], name="lraspp_f1")
     f2 = Sequential([
-        # AveragePooling2D(pool_size=(8, 8)),
         GlobalAveragePooling2D(keepdims=True, data_format='channels_last', name='global_avg_pool'),
         Conv2D(out_dim, (1, 1), padding='same', name="lraspp_conv_1x1_f2"),
-        # sigmoid
         Activation(tf.nn.sigmoid, name="lraspp_sigmoid_f2"),
         # 8x upsample
-        # UpSampling2D(size=(8, 8), interpolation='bilinear', name='lraspp_up8x')
-        UpSampling2D(size=(8, 16), interpolation='bilinear', name='lraspp_up8x')
+        UpSampling2D(size=(4, 8), interpolation='bilinear', name='lraspp_up8x')
     ], name="lraspp_f2")
-
     # multi
     x = tf.multiply(f1(inputs), f2(inputs), name='lraspp_multiply')
     return x
@@ -66,7 +62,6 @@ class BottleNeck(Layer):
         self.pw_out = Sequential([
             Conv2D(filters=out_size, kernel_size=(1, 1), strides=1, padding="same", kernel_initializer='he_normal', use_bias=False),
             BatchNormalization(),
-            # Activation(tf.keras.activations.linear)
         ], name="{}/pw_out".format(name))
 
     def call(self, inputs, training=None, **kwargs):
@@ -142,18 +137,16 @@ class TinyLPR(tf.keras.Model):
         # backbone and merge layer
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear", name='upsample')
-        self.pooling = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='same', name='pooling')
 
-        # downsample stride 2
-        self.dconv1 = Conv2D(128, 3, strides=2, padding='same', kernel_initializer='he_normal', name='c1_conv')
+        # skip connection
+        self.skip = Conv2D(128, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv')
 
         self.mask_head = Sequential([
-            # 2x upsample
             UpSampling2D(size=(2, 2), interpolation="bilinear", name='seg_upsample1'),
-            # mask
-            Conv2D(1, 1, padding='same', kernel_initializer='he_normal', name='seg_mask'),
+            Conv2D(1, 1, padding='same', kernel_initializer='he_normal', name='seg_mask', activation='sigmoid'),
             UpSampling2D(size=(4, 4), interpolation="bilinear", name='seg_upsample2'),
         ], name='mask_head')
+
         # out
         self.dense_softmax = Sequential([
             Dense(self.output_dim, kernel_initializer='he_normal', name='dense_softmax'),
@@ -161,9 +154,9 @@ class TinyLPR(tf.keras.Model):
             Activation('softmax', dtype='float32', name='act_softmax')
         ], name='dense_softmax')
         # ctc loss
-        self.ctc_loss = CTCLayer(name="ctc_loss")
+        self.ctc_loss = CTCLayer(name="ctc")
         # bce loss
-        self.bce_loss = BCE_loss(name="bce_loss")
+        self.bce_loss = BCE_loss(name="bce")
         # inputs
         self.input_tensor = Input(shape=self.shape, dtype=tf.float32, name='input0')
         self.ctc_label_tensor = Input(shape=(MAX_LABEL_LEN,), dtype=tf.int64, name='input_ctc')
@@ -175,21 +168,23 @@ class TinyLPR(tf.keras.Model):
     def build(self, input_shape):
         # backbone
         c1, c2, c3 = self.model(self.input_tensor, training=self.train)
-        c3 = self.upsample(c3)
-        f_map = tf.concat([c2, c3], axis=-1, name='concat') # (bs, 8, 16, 168)
+        f_map = c3
 
         lraspp = LRASPP(f_map, 128, train=self.train)
+        lraspp = self.upsample(lraspp)
 
         # add
-        c1 = self.dconv1(c1)
-        concat = tf.multiply(c1, lraspp, name='multiply')
+        c2 = self.skip(c2)
+        # concat = tf.add(c2, lraspp, name='add')
+        concat = tf.multiply(c2, lraspp, name='multiply')
 
         # flatten
         x = tf.reshape(concat, (tf.shape(concat)[0], 128, 128), name='flatten_reshape')
 
         if self.train:
-            # dropout
             x = self.dropout(x)
+            # bn
+            # x = BatchNormalization(trainable=self.train, name='bn_last')(x)
 
         # dense softmax
         ctc = self.dense_softmax(x)
@@ -200,15 +195,14 @@ class TinyLPR(tf.keras.Model):
             if self.with_mask:
                 mask = self.mask_head(concat) # (bs, 64, 128, 86)
                 bce_loss = self.bce_loss(self.mask_label_tensor, mask)
-                loss = ctc_loss, bce_loss
+                loss = ctc_loss, bce_loss*.5
             else:
                 loss = ctc_loss
 
             return Model(
                 inputs=[self.input_tensor, self.ctc_label_tensor, self.mask_label_tensor],
                 outputs=loss,
-                name='tinyLPR'
-            )
+                name='tinyLPR',)
         else:
             return Model(inputs=self.input_tensor, outputs=ctc, name='tinyLPR')
 

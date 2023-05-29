@@ -213,9 +213,21 @@ def randomGaussian(image, mean=0.2, sigma=0.3):
 # input: batch_size, images, labels
 # output: batch_images, batch_labels
 class LPGenerate(Sequence):
-    def __init__(self, batch_size, dir_path="train", target_size=(64, 128), shuffle=True, sample_num=5000, evl_mode=False, aug=False):
+    def __init__(self,
+        batch_size,
+        dir_path="train",
+        target_size=(64, 128),
+        shuffle=True,
+        sample_num=5000,
+        evl_mode=False,
+        double_model=False,
+        aug=False):
+
         self.batch_size = batch_size
         self.total_images = glob.glob(dir_path + '/*.jpg')
+        if double_model:
+            # pick which include space
+            self.total_images = [x for x in self.total_images if x.find(' ') != -1]
         self.sample_num = sample_num
         self.shuffle = shuffle
         if not self.shuffle:

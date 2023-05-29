@@ -37,7 +37,7 @@ class RepresentativeDataset:
             input_data = create_image(input_data, width=w, height=h)
             input_data = np.expand_dims(input_data, axis=-1)
             input_data = np.expand_dims(input_data, axis=0)
-            input_data = input_data.astype('float32')
+            input_data = input_data.astype('float32') / 255.0
             yield [input_data]
 
 
@@ -57,9 +57,10 @@ def saved_model2pb(
         shape=(64, 128, 1),
         output_dim=85+1,
         train=False,
+        with_mask=False,
     ).build(input_shape=[(1, 64, 128, 1)])
 
-    model.load_weights('best_model_v2.h5', by_name=True)
+    model.load_weights('best_model.h5', by_name=True)
 
     # # model = keras.models.load_model(
     # #     saved_model_dir,
@@ -182,7 +183,7 @@ def quantization2tflite(
 if __name__ == '__main__':
     # width, height
     IMG_SIZE = (64, 128)
-    VAL_DIR = 'train'
+    VAL_DIR = 'evl'
     QUANTIZATION_SAMPLE_SIZE = 500
     MODEL_PATH = 'tiny_lpr'
 
