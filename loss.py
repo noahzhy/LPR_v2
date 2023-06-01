@@ -18,7 +18,7 @@ class CenterLossLayer(Layer):
         config.update({"alpha": self.alpha, "num_classes": self.num_classes})
         return config
 
-    def call(self, logits, cnn_reshaped, label):
+    def call(self, logits, cnn_reshaped, labels):
         cnn_out = cnn_reshaped
         bs, f, c = cnn_out.shape.as_list() # bs, 128, 128
         bs = 1
@@ -26,7 +26,7 @@ class CenterLossLayer(Layer):
 
         # single char labels required by center_loss op
         # self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None], name="bat_labels")
-        self.bat_labels = np.zeros(shape=(bs,), dtype=np.int32)
+        self.bat_labels = labels
         # nums of chars in each sample, used to filter sample to do center loss
         # self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None], name="char_num")
         self.char_num = np.zeros(shape=(bs,), dtype=np.int32)
@@ -36,12 +36,8 @@ class CenterLossLayer(Layer):
         self.char_pos_init = np.zeros(shape=(bs, 2), dtype=np.int32)
 
         # Reshape to the shape lstm needed. [batch_size, max_time, ..]
-        # [batch_size, f, c] -> [batch_size, c, f]
-        cnn_out_reshaped = tf.transpose(cnn_out, [0, 2, 1])
-
-        self.embedding = cnn_out_reshaped
-        # [batch_size, f, classes] -> [f, batch_size, classes]
-        self.logits = tf.transpose(logits, (1, 0, 2))
+        # [batch_size, steps, features]
+        self.embedding = cnn_reshaped
         self.raw_pred = tf.argmax(logits, axis=2, name='raw_prediction')
 
         # 使用单个样本的对齐策略，如果一个样本中有重复预测，则去重后参与 center_loss 计算，如果有漏字，则不参与 center_loss 计算
@@ -79,13 +75,6 @@ class CenterLossLayer(Layer):
         len_features = features.get_shape()[1]
 
         # 建立一个Variable,shape为[num_classes, len_features]，用于存储整个网络的样本中心
-        # centers = tf.compat.v1.get_variable(
-        #     'centers',
-        #     [num_classes, len_features],
-        #     dtype=tf.float32,
-        #     initializer=tf.constant_initializer(0),
-        #     trainable=False
-        # )
         centers = np.zeros(shape=(self.num_classes, len_features), dtype=np.float32)
         # 将label展开为一维的，输入如果已经是一维的，则该动作其实无必要
         # labels = tf.reshape(labels, [-1])
@@ -207,13 +196,12 @@ class CenterLossLayer(Layer):
             self.embedding = self.get_features(self.char_pos, embedding)
 
 
-
 class FocalLossLayer(Layer):
-    def __init__(self, name=None, **kwargs):
+    def __init__(self, alpha=0.1, gamma=5.0, name=None, **kwargs):
         super(FocalLossLayer, self).__init__(name=name, **kwargs)
         self.loss_fn = K.ctc_batch_cost
-        self.alpha = 0.2
-        self.gamma = 5.0
+        self.alpha = alpha
+        self.gamma = gamma
 
     def call(self, y_true, y_pred):
         input_length = K.tile([[K.shape(y_pred)[1]]], [K.shape(y_pred)[0], 1])
@@ -223,6 +211,11 @@ class FocalLossLayer(Layer):
         focal_ctc_loss = tf.multiply(tf.multiply(self.alpha, tf.pow((1 - p), self.gamma)), loss)
         loss = tf.reduce_mean(focal_ctc_loss)
         return loss
+
+    def get_config(self):
+        config = super(FocalLossLayer, self).get_config()
+        config.update({"alpha": self.alpha, "gamma": self.gamma})
+        return config
 
 
 class ACELayer(Layer):

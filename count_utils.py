@@ -33,8 +33,7 @@ def move_images(images, dst_dir):
             os.rename(png_file, os.path.join(dst_dir, os.path.basename(png_file)))
 
 
-# main
-if __name__ == '__main__':
+def divide_train_test(root_dir):
     # list all images in a directory, (.png, .jpg) as pairs
     images = list_all_images('total')
     # divide the images into train and test
@@ -42,3 +41,24 @@ if __name__ == '__main__':
     # move divided images to train and test dir
     move_images(train_images, 'train')
     move_images(test_images, 'test')
+
+
+def count_dataset_single_and_double_ratio(dir_path):
+    # list all images in a directory, (.png, .jpg) as pairs
+    images = list_all_images(dir_path)
+    # if name contains space, it is double
+    double_images = [x for x in images if x.find(' ') != -1]
+    # single images
+    single_images = [x for x in images if x.find(' ') == -1]
+
+    print('total images: ', len(images))
+    print('double images: ', len(double_images))
+    print('single images: ', len(single_images))
+
+
+# main 
+if __name__ == '__main__':
+    # divide the images into train and test
+    # divide_train_test('total')
+
+    count_dataset_single_and_double_ratio('train')

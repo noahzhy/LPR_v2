@@ -9,7 +9,6 @@ import keras.backend as K
 from keras.layers import *
 from keras.models import *
 from keras.callbacks import *
-from keras.optimizers.optimizer_v2 import *
 from keras.optimizers import *
 
 from cosine import *
@@ -25,19 +24,25 @@ if os.path.exists('./logs'):
 
 # training config
 MAX_LABEL_LENGTH = 10
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 
-# TRAIN_SAMPLE = 189131
-# TEST_SAMPLE = 21015
+# TRAIN_SAMPLE = glob.glob('train/*.jpg')
+# TEST_SAMPLE = glob.glob('test/*.jpg')
 TRAIN_SAMPLE = 20000
 TEST_SAMPLE = 1000
 NUM_EPOCHS = 200
 WARMUP_EPOCH = 0
-LEARNING_RATE = 1e-40
+LEARNING_RATE = 3e-40
+
+# optimizer = Adam(learning_rate=LEARNING_RATE, amsgrad=True)
+# optimizer = Nadam(learning_rate=LEARNING_RATE, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+optimizer = SGD(learning_rate=LEARNING_RATE, momentum=0.95, nesterov=False)
+
+metrics_keys = "val_ctc_loss"
+metrics_keys = "val_loss"
 
 input_shape = (64, 128, 1)
 char_num = 85
-double_model = False
 
 train_dataloader = LPGenerate(
     BATCH_SIZE,
@@ -45,7 +50,7 @@ train_dataloader = LPGenerate(
     sample_num=TRAIN_SAMPLE,
     dir_path='train',
     target_size=input_shape[:2],
-    double_model=double_model
+    datasetType=DatasetType.BALANCE,
 )
 test_dataloader = LPGenerate(
     BATCH_SIZE,
@@ -53,7 +58,7 @@ test_dataloader = LPGenerate(
     sample_num=TEST_SAMPLE,
     dir_path='test',
     target_size=input_shape[:2],
-    double_model=double_model
+    datasetType=DatasetType.BALANCE,
 )
 
 epoch_step = TRAIN_SAMPLE // BATCH_SIZE
@@ -61,23 +66,18 @@ warmup_batches = WARMUP_EPOCH * epoch_step
 total_steps = NUM_EPOCHS * epoch_step
 warmup_steps = WARMUP_EPOCH * epoch_step
 
-# metrics_keys = "val_ctc_loss"
-metrics_keys = "val_loss"
-
 model = TinyLPR(
     shape=input_shape,
     output_dim=char_num+1,
     train=True,
     with_mask=(metrics_keys == "val_ctc_loss"),
-    # with_mask=True,
 ).build(input_shape=[
     (BATCH_SIZE, *input_shape),
     (BATCH_SIZE, MAX_LABEL_LENGTH),
     (BATCH_SIZE, *input_shape),
 ])
 
-model.load_weights('ds_4052.h5', by_name=True, skip_mismatch=True)
-# model.load_weights('single_line.h5', by_name=True, skip_mismatch=True)
+# model.load_weights('s9307_d9576_fa9410.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -90,9 +90,7 @@ warm_up_lr = WarmUpCosineDecayScheduler(
 def train(model, train_data, test_data):
     model.compile(
         loss=lambda y_true, y_pred: y_pred,
-        optimizer=Adam(learning_rate=LEARNING_RATE, amsgrad=True),
-        # sdg
-        # optimizer=SGD(learning_rate=LEARNING_RATE, momentum=0.95, nesterov=True),
+        optimizer=optimizer,
     )
     callbacks_list = [
         ModelCheckpoint(
@@ -124,23 +122,28 @@ def train(model, train_data, test_data):
     )
 
 
-def evl():
+def eval(dir_path='test'):
     BATCH_SIZE = 800
-    evl_dataloader = LPGenerate(BATCH_SIZE, shuffle=False, dir_path='test', target_size=input_shape[:2], evl_mode=True)
+    evl_dataloader = LPGenerate(
+        BATCH_SIZE,
+        shuffle=False,
+        dir_path=dir_path,
+        target_size=input_shape[:2],
+        datasetType=DatasetType.FULL,
+        evl_mode=True,
+    )
     test_model = TinyLPR(
         shape=input_shape,
         output_dim=char_num+1,
         train=False,
         with_mask=False,
-    ).build(input_shape=[
-        (BATCH_SIZE, *input_shape),
-    ])
+    ).build(input_shape=[(BATCH_SIZE, *input_shape),])
 
     test_img, test_label = evl_dataloader.__getitem__(0)
     test_label = test_label[0]
 
-    # test_model.load_weights(filepath='best_model_tmp.h5')
-    test_model.load_weights(filepath='best_model.h5')
+    # test_model.load_weights(filepath='best_model.h5')
+    test_model.load_weights(filepath='s9307_d9576_fa9410.h5')
 
     y_pred = test_model.predict(test_img[0])
     shape = y_pred.shape
@@ -155,7 +158,7 @@ def evl():
     format_err = 1e-8
     error_chars_count = 0
     error_num_count = 0
-    total_error = 0
+    total_error = 1e-8
     for i in range(BATCH_SIZE):
         y_pred = "".join([CHARS[x] for x in out[i] if x != -1])
         label = "".join([DECODE_DICT[x] for x in test_label[i] if x != len(DECODE_DICT)])
@@ -196,26 +199,26 @@ def evl():
                 print("Error: {}, \t{}".format(label, y_pred))
                 total_error += 1
 
-    print("--------------------------------------------------")
+    print("\nResults\n--------------------------------------------------")
     # keep 2 decimal places in percentage
-    print("Accuracy: {:.2f}%".format(correct / BATCH_SIZE * 100))
-    print("Single Accuracy: {:.2f}%".format(single_correct / sum_single * 100))
-    print("Double Accuracy: {:.2f}%".format(double_correct / sum_double * 100))
-    print("Final Accuracy: {:.2f}%".format(correct / (BATCH_SIZE-format_err) * 100))
+    print("Original Accuracy: \t{:.2f}%".format(correct / BATCH_SIZE * 100))
+    print("S. LPR   Accuracy: \t{:.2f}%".format(single_correct / sum_single * 100))
+    print("D. LPR   Accuracy: \t{:.2f}%".format(double_correct / sum_double * 100))
+    print("Final    Accuracy: \t{:.2f}%".format(correct / (BATCH_SIZE-format_err) * 100))
     # error chars count and error num count in percentage
     print("--------------------------------------------------")
-    print("Error num. count: {:.2f}%".format(error_num_count / (total_error) * 100))
-    print("Error chars count: {:.2f}%".format(error_chars_count / (total_error) * 100))
-
-
-def is_valid(license_plate):
-    # remove space
-    license_plate = license_plate.replace(' ', '')
-    regex = re.compile(r'^([가-힣]{2}\d{2}|\d{2,3})[가-힣]{1}\d{4}$')
-    return regex.match(license_plate) is not None
+    print("Error num.  count: \t{:.2f}%".format(error_num_count / (total_error) * 100))
+    print("Error chars count: \t{:.2f}%".format(error_chars_count / (total_error) * 100))
+    print()
+    # rename files to s{}_d{}_fa{}.h5 format(accuracy keep 2 decimal places)
+    # os.rename('best_model.h5', 's{}_d{}_fa{}.h5'.format(
+    #     round(single_correct / sum_single * 1e4),
+    #     round(double_correct / sum_double * 1e4),
+    #     round(correct / (BATCH_SIZE-format_err) * 1e4),
+    # ))
 
 
 if __name__ == '__main__':
     model.summary()
     # train(model, train_dataloader, test_dataloader)
-    evl()
+    eval('eval')

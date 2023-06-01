@@ -74,11 +74,6 @@ Single Accuracy: 90.87%
 Double Accuracy: 67.88%
 Final Accuracy: 88.45%
 
-Accuracy: 94.50%
-Single Accuracy: 94.66%
-Double Accuracy: 93.75%
-Final Accuracy: 96.31%
-
 ## Experiment 6
 
 lraspp 连接 1/16 的 downsample 的 cnn
@@ -87,11 +82,6 @@ Accuracy: 87.62%
 Single Accuracy: 90.87%
 Double Accuracy: 75.15%
 Final Accuracy: 89.53%
-
-Accuracy: 94.00%
-Single Accuracy: 94.97%
-Double Accuracy: 89.58%
-Final Accuracy: 95.80%
 
 ## Experiment 7
 
@@ -103,4 +93,63 @@ Final Accuracy: 87.26%
 
 ## Experiment 8
 
+回归最淳朴的结构
 
+Accuracy: 88.88%
+Single Accuracy: 91.18%
+Double Accuracy: 80.00%
+Final Accuracy: 90.34%
+
+## Experiment 9
+
+repeat the train of double train and single double train
+
+Original Accuracy:      90.38%
+S. LPR   Accuracy:      91.50%
+D. LPR   Accuracy:      86.06%
+Final    Accuracy:      91.98%
+
+## Experiment 10
+
+Focal CTC Loss(alpha=0.3, gamma=5.0), SGD optimizer
+
+Original Accuracy:      91.75%
+S. LPR   Accuracy:      91.34%
+D. LPR   Accuracy:      93.33%
+Final    Accuracy:      92.44%
+
+## Experiment 11
+
+Focal CTC Loss(alpha=0.5, gamma=5.0), SGD optimizer
+
+Original Accuracy:      93.62%
+S. LPR   Accuracy:      93.07%
+D. LPR   Accuracy:      95.76%
+Final    Accuracy:      94.10%
+
+## Experiment 12
+
+Focal CTC Loss(alpha=0.1, gamma=5.0), SGD optimizer
+
+Original Accuracy:      93.00%
+S. LPR   Accuracy:      92.91%
+D. LPR   Accuracy:      93.33%
+Final    Accuracy:      93.94%
+
+## Conclusion
+
+Choose alpha=0.5, gamma=5.0, SGD optimizer
+
+on Test dataset
+
+Original Accuracy:      96.12%
+S. LPR   Accuracy:      96.49%
+D. LPR   Accuracy:      94.44%
+Final    Accuracy:      97.59%
+
+on Real dataset
+
+Original Accuracy:      93.62%
+S. LPR   Accuracy:      93.07%
+D. LPR   Accuracy:      95.76%
+Final    Accuracy:      94.10%

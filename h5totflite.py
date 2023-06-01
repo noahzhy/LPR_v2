@@ -45,7 +45,7 @@ def saved_model2pb(
         saved_model_dir,
         input_shape=(1,64,128,1),
         input_node="input0",
-        output_node="dense_softmax",
+        output_node="act_softmax",
     ):
     # path of the directory where you want to save your model
     frozen_out_path = 'tmp_pb'
@@ -60,7 +60,7 @@ def saved_model2pb(
         with_mask=False,
     ).build(input_shape=[(1, 64, 128, 1)])
 
-    model.load_weights('best_model.h5', by_name=True)
+    model.load_weights('s9307_d9576_fa9410.h5', by_name=True)
 
     # # model = keras.models.load_model(
     # #     saved_model_dir,
@@ -126,7 +126,7 @@ def saved_model2pb(
 def quantization2tflite(
         model_path,
         mode="pb",
-        input_node="image",
+        input_node="input0",
         output_node="Identity",
         quantization_mode=tf.uint8,
         save_name="model_uint8",
@@ -183,7 +183,7 @@ def quantization2tflite(
 if __name__ == '__main__':
     # width, height
     IMG_SIZE = (64, 128)
-    VAL_DIR = 'evl'
+    VAL_DIR = 'eval'
     QUANTIZATION_SAMPLE_SIZE = 500
     MODEL_PATH = 'tiny_lpr'
 

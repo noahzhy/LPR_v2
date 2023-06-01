@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import glob
@@ -31,6 +32,12 @@ koreaCity = {
     '전북': 'M', '전남': 'N', '경북': 'O', '경남': 'P',
     '제주': 'Q'
 }
+
+def is_valid(license_plate):
+    # remove space
+    license_plate = license_plate.replace(' ', '')
+    regex = re.compile(r'^([가-힣]{2}\d{2}|\d{2,3})[가-힣]{1}\d{4}$')
+    return regex.match(license_plate) is not None
 
 
 def str2list(string):
@@ -156,58 +163,10 @@ def path_to_label(path):
     return to_label(label)
 
 
-@staticmethod
-def return_raw(img):
-    return img
-
-@staticmethod
-def randomColor(image):
-    """
-    对图像进行颜色抖动
-    :param image: PIL的图像image
-    :return: 有颜色色差的图像image
-    """
-    random_factor = np.random.randint(0, 31) / 10.  # 随机因子
-    color_image = ImageEnhance.Color(image).enhance(random_factor)  # 调整图像的饱和度
-    random_factor = np.random.randint(10, 21) / 10.  # 随机因子
-    brightness_image = ImageEnhance.Brightness(color_image).enhance(random_factor)  # 调整图像的亮度
-    random_factor = np.random.randint(10, 21) / 10.  # 随机因1子
-    contrast_image = ImageEnhance.Contrast(brightness_image).enhance(random_factor)  # 调整图像对比度
-    random_factor = np.random.randint(0, 31) / 10.  # 随机因子
-    return ImageEnhance.Sharpness(contrast_image).enhance(random_factor)  # 调整图像锐度
-
-@staticmethod
-def randomGaussian(image, mean=0.2, sigma=0.3):
-    """
-        对图像进行高斯噪声处理
-    :param image:
-    :return:
-    """
-
-    def gaussianNoisy(im, mean=0.2, sigma=0.3):
-        """
-        对图像做高斯噪音处理
-        :param im: 单通道图像
-        :param mean: 偏移量
-        :param sigma: 标准差
-        :return:
-        """
-        for _i in range(len(im)):
-            im[_i] += random.gauss(mean, sigma)
-        return im
-
-    # 将图像转化成数组
-    img = np.array(image)
-    img.flags.writeable = True  # 将数组改为读写模式
-    width, height = img.shape[:2]
-    img_r = gaussianNoisy(img[:, :, 0].flatten(), mean, sigma)
-    img_g = gaussianNoisy(img[:, :, 1].flatten(), mean, sigma)
-    img_b = gaussianNoisy(img[:, :, 2].flatten(), mean, sigma)
-    img[:, :, 0] = img_r.reshape([width, height])
-    img[:, :, 1] = img_g.reshape([width, height])
-    img[:, :, 2] = img_b.reshape([width, height])
-    return Image.fromarray(np.uint8(img))
-
+class DatasetType:
+    FULL = 0
+    DOUBLE = 1
+    BALANCE = 2
 
 # function to generate batch
 # input: batch_size, images, labels
@@ -220,14 +179,24 @@ class LPGenerate(Sequence):
         shuffle=True,
         sample_num=5000,
         evl_mode=False,
-        double_model=False,
-        aug=False):
-
+        datasetType=DatasetType.FULL,
+        ratio=3.0
+    ):
+        self.ratio = ratio
         self.batch_size = batch_size
         self.total_images = glob.glob(dir_path + '/*.jpg')
-        if double_model:
+        self.total_single_images = [x for x in self.total_images if x.find(' ') == -1]
+        self.total_double_images = [x for x in self.total_images if x.find(' ') != -1]
+
+        if datasetType == DatasetType.DOUBLE:
             # pick which include space
             self.total_images = [x for x in self.total_images if x.find(' ') != -1]
+        elif datasetType == DatasetType.BALANCE:
+            # pick both
+            self.total_images = self.total_double_images + random.sample(self.total_single_images, int(len(self.total_double_images) * self.ratio))
+        else:
+            pass
+
         self.sample_num = sample_num
         self.shuffle = shuffle
         if not self.shuffle:
@@ -239,7 +208,6 @@ class LPGenerate(Sequence):
             self.images = self.total_images
         self.target_size = target_size
         self.evl_mode = evl_mode
-        self.aug = aug
         self.on_epoch_end()
 
     def find_matching_mask(self, img_path):
@@ -264,11 +232,11 @@ class LPGenerate(Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             if self.sample_num != -1:
+                self.total_images = self.total_double_images + random.sample(self.total_single_images, int(len(self.total_double_images) * self.ratio))
                 self.images = np.random.choice(self.total_images, self.sample_num)
             else:
                 np.random.shuffle(self.images)
     
-
     def __data_generation(self, batches):
         height, width = self.target_size
         X = np.empty((self.batch_size, *(height, width), 1))
@@ -278,11 +246,6 @@ class LPGenerate(Sequence):
 
         for i, img_path in enumerate(batches):
             img = Image.open(img_path).convert('RGB')
-            if self.aug:
-                ops = [return_raw, randomGaussian, randomColor]
-                op = random.choice(ops)
-                img = op(img)
-
             img = img.convert('L')
             img = create_image(img, width=width, height=height)
 
@@ -304,7 +267,7 @@ class LPGenerate(Sequence):
 
 
 if __name__ == "__main__":
-    dataLoader = LPGenerate(5, shuffle=True, dir_path="train", sample_num=100, aug=True)
+    dataLoader = LPGenerate(5, shuffle=True, dir_path="train", sample_num=100)
     for i in range(0, len(dataLoader)):
         x, y = dataLoader[i]
         img_data, m = x
