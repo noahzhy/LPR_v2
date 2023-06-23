@@ -22,8 +22,6 @@ MAX_LABEL_LEN = 10
 CHARS = " 0가A조a서B무b1나C호c어D부d2다E고e저F수f3라G노g허H우h4마I도i거J주j5바K로k너L배l6사M모m더N구n7아O보o러P누p8자Q소q머두하9오버루"
 CHARS_DICT = {char: i for i, char in enumerate(CHARS)}
 DECODE_DICT = {i: char for i, char in enumerate(CHARS)}
-# print('CHARS_DICT: ', CHARS_DICT)
-# print('DECODE_DICT: ', DECODE_DICT)
 # South Korea city
 koreaCity = {
     '서울': 'A', '부산': 'B', '대구': 'C', '인천': 'D',
@@ -165,8 +163,9 @@ def path_to_label(path):
 
 class DatasetType:
     FULL = 0
-    DOUBLE = 1
-    BALANCE = 2
+    SINGLE = 1
+    DOUBLE = 2
+    BALANCE = 3
 
 # function to generate batch
 # input: batch_size, images, labels
@@ -187,10 +186,12 @@ class LPGenerate(Sequence):
         self.total_images = glob.glob(dir_path + '/*.jpg')
         self.total_single_images = [x for x in self.total_images if x.find(' ') == -1]
         self.total_double_images = [x for x in self.total_images if x.find(' ') != -1]
+        self.datasetType = datasetType
 
-        if datasetType == DatasetType.DOUBLE:
-            # pick which include space
-            self.total_images = [x for x in self.total_images if x.find(' ') != -1]
+        if datasetType == DatasetType.SINGLE:
+            self.total_images = self.total_single_images
+        elif datasetType == DatasetType.DOUBLE:
+            self.total_images = self.total_double_images
         elif datasetType == DatasetType.BALANCE:
             # pick both
             self.total_images = self.total_double_images + random.sample(self.total_single_images, int(len(self.total_double_images) * self.ratio))
@@ -232,9 +233,15 @@ class LPGenerate(Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             if self.sample_num != -1:
-                self.total_images = self.total_double_images + random.sample(self.total_single_images, int(len(self.total_double_images) * self.ratio))
+                if self.datasetType == DatasetType.SINGLE:
+                    self.total_images = self.total_single_images
+                elif self.datasetType == DatasetType.DOUBLE:
+                    self.total_images = self.total_double_images
+                elif self.datasetType == DatasetType.BALANCE:
+                    self.total_images = self.total_double_images + random.sample(self.total_single_images, int(len(self.total_double_images) * self.ratio))
+
                 self.images = np.random.choice(self.total_images, self.sample_num)
-            else:
+
                 np.random.shuffle(self.images)
     
     def __data_generation(self, batches):

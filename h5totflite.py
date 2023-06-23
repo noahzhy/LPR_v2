@@ -10,12 +10,13 @@ import tensorflow as tf
 import tensorflow.compat.v1 as tfv1
 from keras_flops import get_flops
 from PIL import Image
+import shutil
 from tensorflow import keras
 from tensorflow.python.framework.convert_to_constants import \
     convert_variables_to_constants_v2
 
 
-from mbv3s import TinyLPR
+from tiny_lpr import TinyLPR
 from utils import *
 
 
@@ -60,7 +61,7 @@ def saved_model2pb(
         with_mask=False,
     ).build(input_shape=[(1, 64, 128, 1)])
 
-    model.load_weights('s9307_d9576_fa9410.h5', by_name=True)
+    model.load_weights('s9259_d9583_fa9333.h5', by_name=True)
 
     # # model = keras.models.load_model(
     # #     saved_model_dir,
@@ -189,4 +190,6 @@ if __name__ == '__main__':
 
     quantization_dataset = RepresentativeDataset(VAL_DIR, IMG_SIZE, QUANTIZATION_SAMPLE_SIZE)
     pb_path, input_name, output_name = saved_model2pb(MODEL_PATH)
-    quantization2tflite(pb_path, 'pb', input_name, output_name, representative_dataset=quantization_dataset)
+    quantization2tflite(pb_path, 'pb', input_name, output_name, representative_dataset=quantization_dataset, save_name='tiny_lpr')
+    # remove pb _path folder
+    shutil.rmtree(pb_path)

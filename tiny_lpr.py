@@ -1,5 +1,5 @@
-from PIL import Image
 import numpy as np
+from PIL import Image
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
 from tensorflow.keras.layers import *
@@ -11,48 +11,18 @@ from loss import *
 MAX_LABEL_LEN = 10
 
 
-class BCE_loss(Layer):
-    def __init__(self, name="bce_loss"):
-        super(BCE_loss, self).__init__(name=name)
-
-    def call(self, y_true, y_pred, **kwargs):
-        loss = tf.keras.losses.BinaryCrossentropy(from_logits=False)(y_true, y_pred)
-        return loss
-
-
 def Attn(x, out_dim, train=False):
-    _local = Sequential([
-        Conv2D(out_dim, (1, 1), padding='same', use_bias=False),
-        BatchNormalization(trainable=train),
-        Activation(tf.nn.relu),
-    ], name="local")
-    _global = Sequential([
-        GlobalAveragePooling2D(keepdims=True),
-        Conv2D(out_dim, (1, 1), padding='same'),
-        # dense
-        # Dense(out_dim),
+    c = x.shape[-1]
+    attn = Sequential([
+        GlobalAveragePooling2D(),
+        Reshape((c, 1)),
+        Conv1D(1, 5, padding='same', use_bias=False, kernel_initializer='he_normal'),
         Activation(tf.nn.sigmoid),
-    ], name="global")
-    # multi
-    x = tf.multiply(_global(x), _local(x))
+        Reshape((1, 1, c)),
+    ], name="attn")
+    x = tf.multiply(x, attn(x))
+    x = UpSampling2D((2, 2), interpolation='bilinear')(x)
     return x
-
-
-class SEBlock(Layer):
-    def __init__(self, input_channels, r=4):
-        super(SEBlock, self).__init__()
-        self.pool = GlobalAveragePooling2D(keepdims=True)
-        self.fc1 = Dense(units=input_channels // r)
-        self.fc2 = Dense(units=input_channels)
-
-    def call(self, inputs, **kwargs):
-        x = self.pool(inputs)
-        x = self.fc1(x)
-        x = tf.nn.relu(x)
-        x = self.fc2(x)
-        x = tf.nn.sigmoid(x)
-        output = inputs * x
-        return output
 
 
 class BottleNeck(Layer):
@@ -68,14 +38,12 @@ class BottleNeck(Layer):
             BatchNormalization(),
             Activation(tf.nn.relu6)
         ], name="{}/pw_in".format(name))
-        
+
         self.dw = Sequential([
             DepthwiseConv2D(kernel_size=(k, k), strides=s, padding="same", kernel_initializer='he_normal', use_bias=False),
             BatchNormalization(),
             Activation(tf.nn.relu6),
         ], name="{}/dw".format(name))
-
-        self.se_block = SEBlock(exp_size)
 
         self.pw_out = Sequential([
             Conv2D(filters=out_size, kernel_size=(1, 1), strides=1, padding="same", kernel_initializer='he_normal', use_bias=False),
@@ -86,10 +54,6 @@ class BottleNeck(Layer):
         # shortcut
         x = self.pw_in(inputs)
         x = self.dw(x)
-
-        if self.se:
-            x = self.se_block(x)
-
         x = self.pw_out(x)
 
         if self.stride == 1 and self.in_size == self.out_size:
@@ -154,14 +118,13 @@ class TinyLPR(tf.keras.Model):
         self.with_mask = with_mask
         # backbone and merge layer
         self.model = MobileNetV3Small()
-        self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear", name='upsample')
 
         # skip connection
-        self.skip = Conv2D(128, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv')
+        self.skip = Conv2D(96, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv')
 
         self.mask_head = Sequential([
             UpSampling2D(size=(2, 2), interpolation="bilinear", name='seg_upsample1'),
-            Conv2D(1, 1, padding='same', kernel_initializer='he_normal', name='seg_mask', activation='sigmoid'),
+            Conv2D(self.output_dim, 1, padding='same', kernel_initializer='he_normal', name='seg_mask', activation='sigmoid'),
             UpSampling2D(size=(4, 4), interpolation="bilinear", name='seg_upsample2'),
         ], name='mask_head')
 
@@ -172,37 +135,30 @@ class TinyLPR(tf.keras.Model):
         # ctc loss
         self.ctc_loss = FocalLossLayer(name="ctc")
         # bce loss
-        self.mask_loss = BCE_loss(name="bce")
-        # self.mask_loss = DiceLoss(name="dice")
-
+        self.mask_loss = BCE_loss(name="mask")
         # inputs
         self.input_tensor = Input(shape=self.shape, dtype=tf.float32, name='input0')
         self.ctc_label_tensor = Input(shape=(MAX_LABEL_LEN,), dtype=tf.int64, name='input_ctc')
         self.mask_label_tensor = Input(shape=self.shape, dtype=tf.int64, name='input_mask')
 
         # dropout
-        self.dropout = Dropout(0.2, trainable=self.train, name='dropout')
+        self.dropout = Dropout(0.5, trainable=self.train, name='dropout')
 
     def build(self, input_shape):
         # backbone
         c1, c2, c3 = self.model(self.input_tensor, training=self.train)
-        f_map = c3 # (bs, 4, 8, 96)
-
-        attn = Attn(f_map, 128, train=self.train)
-        attn = self.upsample(attn)
-
+        f_map = c3
+        # attention
+        attn = Attn(f_map, 96, train=self.train)
         c2 = self.skip(c2)
-        concat = tf.multiply(c2, attn, name='multiply')
-
-        bs, h, w, c = tf.shape(concat)[0], tf.shape(concat)[1], tf.shape(concat)[2], tf.shape(concat)[3]
-
+        concat = tf.multiply(attn, c2)
         # flatten
-        x = tf.reshape(concat, (bs, h*w, c), name='flatten_reshape')
+        x = tf.reshape(concat, (tf.shape(concat)[0], 128, 96), name='flatten_reshape')
+        x = tf.transpose(x, perm=[0, 2, 1], name='flatten_transpose')
 
         if self.train:
             x = self.dropout(x)
 
-        reshaped = x
         # softmax
         x = self.dense(x)
         ctc = self.softmax(x)
@@ -220,7 +176,7 @@ class TinyLPR(tf.keras.Model):
             return Model(
                 inputs=[self.input_tensor, self.ctc_label_tensor, self.mask_label_tensor],
                 outputs=loss,
-                name='tinyLPR',)
+                name='tinyLPR')
         else:
             return Model(inputs=self.input_tensor, outputs=ctc, name='tinyLPR')
 
@@ -235,10 +191,9 @@ if __name__ == '__main__':
         shape=input_shape,
         train=True,
         with_mask=True,
-    ).build(input_shape=[
-        (None, *input_shape), (None, MAX_LABEL_LEN), (None, *input_shape)
-    ])
-    model.save("tinyLPR.h5")
+    ).build(input_shape=[(None, *input_shape), (None, MAX_LABEL_LEN), (None, *input_shape)])
+    model.summary()
+    model.save("tinyLPR_train.h5")
 
     model = TinyLPR(
         shape=input_shape,

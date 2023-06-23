@@ -20,24 +20,64 @@ class BCE_loss(Layer):
         return loss
 
 
-# LRASPP
-def LRASPP(inputs, out_dim, train=False):
-    f1 = Sequential([
-        Conv2D(out_dim, (1, 1), padding='same', use_bias=False, name="lraspp_conv_1x1_f1"),
-        BatchNormalization(trainable=train, name="lraspp_bn_f1"),
-        # relu
-        Activation(tf.nn.relu, name="lraspp_relu_f1")
-    ], name="lraspp_f1")
-    f2 = Sequential([
-        GlobalAveragePooling2D(keepdims=True, data_format='channels_last', name='global_avg_pool'),
-        # AveragePooling2D(pool_size=(4, 4), name='lraspp_avg_pool'),
-        Conv2D(out_dim, (1, 1), padding='same', name="lraspp_conv_1x1_f2"),
-        Activation(tf.nn.sigmoid, name="lraspp_sigmoid_f2"),
-        # 8x upsample
-        UpSampling2D(size=(4, 8), interpolation='bilinear', name='lraspp_up8x')
-    ], name="lraspp_f2")
+# CBA, return Sequential
+def CBA(filters, kernel_size=3, strides=1, padding='same', dilation_rate=1, activation='relu', use_bias=False, name=None, train=False):
+    return Sequential([
+        Conv2D(filters, kernel_size, strides=strides, padding=padding, dilation_rate=dilation_rate, use_bias=use_bias),
+        BatchNormalization(trainable=train),
+        Activation(activation),
+    ], name=name)
+
+
+class Self_Attention(Layer):
+    def __init__(self, output_dim, **kwargs):
+        self.output_dim = output_dim
+        super(Self_Attention, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # 为该层创建一个可训练的权重
+        #inputs.shape = (batch_size, time_steps, seq_len)
+        self.kernel = self.add_weight(
+            name='kernel',
+            shape=(3,input_shape[2], self.output_dim),
+            initializer='uniform',
+            trainable=True
+        )
+        super(Self_Attention, self).build(input_shape)
+
+    def call(self, x):
+        WQ = K.dot(x, self.kernel[0])
+        WK = K.dot(x, self.kernel[1])
+        WV = K.dot(x, self.kernel[2])
+
+        QK = K.batch_dot(WQ,K.permute_dimensions(WK, [0, 2, 1]))
+        QK = QK / (self.output_dim**0.5)
+        QK = K.softmax(QK)
+        V = K.batch_dot(QK,WV)
+        return V
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0],input_shape[1],self.output_dim)
+
+
+def Attn(x_local, x_global, out_dim, train=False):
+    _local = Sequential([
+        # dw
+        DepthwiseConv2D(kernel_size=(3, 3), strides=1, padding="same", kernel_initializer='he_normal', use_bias=False),
+        BatchNormalization(trainable=train),
+        Activation(tf.nn.relu6),
+        # pw
+        Conv2D(filters=out_dim, kernel_size=(1, 1), strides=1, padding="same", kernel_initializer='he_normal', use_bias=False),
+        BatchNormalization(trainable=train),
+        Activation(tf.nn.relu6),
+    ], name="local")
+    _global = Sequential([
+        GlobalAveragePooling2D(keepdims=True),
+        Conv2D(out_dim//4, (1, 1), padding='same', activation='relu'),
+        Conv2D(out_dim, (1, 1), padding='same', activation='sigmoid'),
+    ], name="global")
     # multi
-    x = tf.multiply(f1(inputs), f2(inputs), name='lraspp_multiply')
+    x = tf.multiply(_global(x_global), _local(x_local))
     return x
 
 
@@ -107,7 +147,7 @@ class MobileNetV3Small(tf.keras.Model):
         self.conv1 = Conv2D(
             filters=16,
             kernel_size=(3, 3),
-            strides=2,
+            strides=(2, 2),
             padding="same",
             use_bias=False,
             name="conv1")
@@ -120,12 +160,10 @@ class MobileNetV3Small(tf.keras.Model):
         self.bneck4 = BottleNeck(in_size=24, exp_size=96, out_size=40, s=2, k=5)
         self.bneck5 = BottleNeck(in_size=40, exp_size=240, out_size=40, s=1, k=5)
         self.bneck6 = BottleNeck(in_size=40, exp_size=240, out_size=40, s=1, k=5)
-        self.bneck7 = BottleNeck(in_size=40, exp_size=120, out_size=48, s=1, k=5, se=False)
-        self.bneck8 = BottleNeck(in_size=48, exp_size=144, out_size=48, s=1, k=5, se=False)
+        self.bneck7 = BottleNeck(in_size=40, exp_size=120, out_size=48, s=1, k=5)
+        self.bneck8 = BottleNeck(in_size=48, exp_size=144, out_size=48, s=1, k=5)
 
         self.bneck9 = BottleNeck(in_size=48, exp_size=288, out_size=96, s=2, k=5)
-        # self.bneck10 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
-        # self.bneck11 = BottleNeck(in_size=96, exp_size=576, out_size=96, s=1, k=5)
 
     def call(self, inputs, training=None, mask=None):
         x = self.conv1(inputs)
@@ -145,8 +183,6 @@ class MobileNetV3Small(tf.keras.Model):
         c2 = x
 
         x = self.bneck9(x, training=training)
-        # x = self.bneck10(x, training=training)
-        # x = self.bneck11(x, training=training)
         c3 = x
 
         return c1, c2, c3
@@ -163,10 +199,6 @@ class TinyLPR(tf.keras.Model):
         self.model = MobileNetV3Small()
         self.upsample = UpSampling2D(size=(2, 2), interpolation="bilinear", name='upsample')
 
-        # sepconv 3x3 128
-        # self.sepconv = SeparableConv2D(48, 3, strides=2, padding='same', kernel_initializer='he_normal', name='sepconv')
-        # self.sepconv = Conv2D(48, 3, strides=2, padding='same', kernel_initializer='he_normal', name='sepconv')
-
         # skip connection
         self.skip = Conv2D(128, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv')
 
@@ -176,40 +208,42 @@ class TinyLPR(tf.keras.Model):
             UpSampling2D(size=(4, 4), interpolation="bilinear", name='seg_upsample2'),
         ], name='mask_head')
 
-        # last conv 1x1 128
-        self.conv_1x1 = Conv2D(128, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv_1x1')
-
         # out
         self.dense = Dense(self.output_dim, kernel_initializer='he_normal', name='dense_last')
         self.softmax = Activation('softmax', dtype='float32', name='act_softmax')
         
         # ctc loss
         self.ctc_loss = FocalLossLayer(name="ctc")
-        # center loss
-        # self.center_loss = CenterLossLayer(alpha=0.5, num_classes=self.output_dim, name="center")
         # bce loss
-        self.bce_loss = BCE_loss(name="bce")
+        self.mask_loss = BCE_loss(name="bce")
+        # self.mask_loss = DiceLoss(name="dice")
+
         # inputs
         self.input_tensor = Input(shape=self.shape, dtype=tf.float32, name='input0')
         self.ctc_label_tensor = Input(shape=(MAX_LABEL_LEN,), dtype=tf.int64, name='input_ctc')
         self.mask_label_tensor = Input(shape=self.shape, dtype=tf.int64, name='input_mask')
 
         # dropout
-        self.dropout = Dropout(0.2, trainable=self.train, name='dropout')
+        self.dropout = Dropout(0.5, trainable=self.train, name='dropout')
 
     def build(self, input_shape):
         # backbone
         c1, c2, c3 = self.model(self.input_tensor, training=self.train)
         f_map = c3 # (bs, 4, 8, 96)
 
-        lraspp = LRASPP(f_map, 128, train=self.train)
-        lraspp = self.upsample(lraspp)
+        attn = Attn(x_global=f_map, x_local=c2, out_dim=128, train=self.train)
+        concat = attn
+        # attn = self.upsample(attn)
 
-        c2 = self.skip(c2)
-        concat = tf.multiply(c2, lraspp, name='multiply')
+        # skip = self.skip(c2)
+        # concat = tf.multiply(skip, attn, name='multiply')
+
+        bs, h, w, c = tf.shape(concat)[0], tf.shape(concat)[1], tf.shape(concat)[2], tf.shape(concat)[3]
 
         # flatten
-        x = tf.reshape(concat, (tf.shape(concat)[0], 128, 128), name='flatten_reshape')
+        x = tf.reshape(concat, (bs, h*w, c), name='flatten_reshape')
+        # # layer norm
+        # x = LayerNormalization(axis=-1, name='layer_norm')(x)
 
         if self.train:
             x = self.dropout(x)
@@ -223,11 +257,9 @@ class TinyLPR(tf.keras.Model):
             ctc_loss = self.ctc_loss(self.ctc_label_tensor, ctc)
 
             if self.with_mask:
-                # center_loss = self.center_loss(x, reshaped, self.ctc_label_tensor)
                 mask = self.mask_head(concat) # (bs, 64, 128, 86)
-                bce_loss = self.bce_loss(self.mask_label_tensor, mask)
-                # loss = ctc_loss, bce_loss, center_loss
-                loss = ctc_loss, bce_loss
+                mask_loss = self.mask_loss(self.mask_label_tensor, mask)
+                loss = ctc_loss, mask_loss
             else:
                 loss = ctc_loss
 
@@ -260,7 +292,8 @@ if __name__ == '__main__':
         with_mask=False,
     ).build(input_shape=(None, *input_shape))
     model.summary()
-    model.save("tinyLPR_deploy.h5")
+    # model.save("tinyLPR_deploy.h5")
+    model.load_weights("best_model.h5")
 
     # get flops
     flops = get_flops(model, 1)

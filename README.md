@@ -122,34 +122,20 @@ Final    Accuracy:      92.44%
 
 Focal CTC Loss(alpha=0.5, gamma=5.0), SGD optimizer
 
-Original Accuracy:      93.62%
-S. LPR   Accuracy:      93.07%
-D. LPR   Accuracy:      95.76%
-Final    Accuracy:      94.10%
++-------------+-------+----------+
+|             | Count | Accuracy |
++-------------+-------+----------+
+|    Single   |  688  |  92.44%  |
+|    Double   |  168  |  95.83%  |
+|    Total    |  856  |  93.11%  |
+|  Error num. |   48  |  90.57%  |
+| Error chars |   34  |  64.15%  |
+|    Final    |  849  |  93.76%  |
++-------------+-------+----------+
 
-## Experiment 12
+on the test set
 
-Focal CTC Loss(alpha=0.1, gamma=5.0), SGD optimizer
-
-Original Accuracy:      93.00%
-S. LPR   Accuracy:      92.91%
-D. LPR   Accuracy:      93.33%
-Final    Accuracy:      93.94%
-
-## Conclusion
-
-Choose alpha=0.5, gamma=5.0, SGD optimizer
-
-on Test dataset
-
-Original Accuracy:      96.12%
-S. LPR   Accuracy:      96.49%
-D. LPR   Accuracy:      94.44%
-Final    Accuracy:      97.59%
-
-on Real dataset
-
-Original Accuracy:      93.62%
-S. LPR   Accuracy:      93.07%
-D. LPR   Accuracy:      95.76%
-Final    Accuracy:      94.10%
+Original Accuracy:      95.66%
+S. LPR   Accuracy:      95.71%
+D. LPR   Accuracy:      95.39%
+Final    Accuracy:      97.15%

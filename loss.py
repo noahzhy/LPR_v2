@@ -5,44 +5,143 @@ from keras.layers import Input, Dense, Lambda, Layer
 from itertools import groupby
 
 
+# class CenterLossLayer(Layer):
+#     def __init__(self, alpha=0.5, num_classes=100, feat_dim=128, name=None, **kwargs):
+#         super(CenterLossLayer, self).__init__(name=name, **kwargs)
+#         self.alpha = alpha
+#         self.num_classes = num_classes
+#         self.feat_dim = feat_dim
+
+#         self.init_centers()
+
+#     def get_config(self):
+#         config = super(CenterLossLayer, self).get_config()
+#         config.update({
+#             "alpha": self.alpha,
+#             "num_classes": self.num_classes,
+#             "feat_dim": self.feat_dim,
+#             # "centers": self.centers
+#         })
+#         return config
+
+#     def init_centers(self):
+#         def init_centers():
+#             return tf.zeros([self.num_classes, self.feat_dim])
+
+#         self.centers = tf.Variable(
+#             initial_value=init_centers,
+#             dtype=tf.float32,
+#             name='centers'
+#         )
+
+#     def call(self, features, predicts, y_true):
+#         feats_reshape = tf.reshape(features, [-1, self.feat_dim])
+#         print('feats_reshape:', feats_reshape.shape)
+#         print('predicts:', predicts.shape)
+#         label = tf.argmax(predicts, axis=-1)
+#         print('label:', label.shape)
+#         label = tf.reshape(label, [-1])
+#         print('label:', label.shape)
+#         batch_size = tf.shape(feats_reshape)[0]
+#         quit()
+
+#         # Calc L2 distance between feats and centers
+#         square_feat = tf.reduce_sum(tf.square(feats_reshape), axis=1, keepdims=True)
+#         square_feat = tf.tile(square_feat, [1, self.num_classes])
+
+#         square_center = tf.reduce_sum(tf.square(self.centers), axis=1, keepdims=True)
+#         square_center = tf.tile(square_center, [1, batch_size])
+#         square_center = tf.transpose(square_center)
+
+#         distmat = square_feat + square_center - 2.0 * tf.matmul(feats_reshape, tf.transpose(self.centers))
+
+#         # Generate the mask
+#         classes = tf.range(self.num_classes, dtype=tf.int64)
+#         label = tf.expand_dims(label, axis=1)
+#         label = tf.tile(label, [1, self.num_classes])
+#         mask = tf.equal(classes, label)
+#         mask = tf.cast(mask, tf.float32)
+
+#         dist = tf.multiply(distmat, mask)
+
+#         loss = tf.reduce_sum(tf.clip_by_value(dist, clip_value_min=1e-12, clip_value_max=1e+12)) / tf.cast(batch_size, tf.float32)
+#         return loss
+
+
 # tf.compat.v1.disable_eager_execution()
 
 class CenterLossLayer(Layer):
-    def __init__(self, alpha=0.5, num_classes=10, name=None, **kwargs):
+    def __init__(self, alpha=0.5, num_classes=100, feat_dim=128, bs=1, name=None, **kwargs):
         super(CenterLossLayer, self).__init__(name=name, **kwargs)
         self.alpha = alpha
         self.num_classes = num_classes
+        self.feat_dim = feat_dim
+
+        self.bs = bs
+
+        self.init_centers()
 
     def get_config(self):
         config = super(CenterLossLayer, self).get_config()
-        config.update({"alpha": self.alpha, "num_classes": self.num_classes})
+        config.update({
+            "alpha": self.alpha,
+            "num_classes": self.num_classes,
+            "feat_dim": self.feat_dim,
+            # "centers": self.centers
+        })
         return config
 
-    def call(self, logits, cnn_reshaped, labels):
-        cnn_out = cnn_reshaped
-        bs, f, c = cnn_out.shape.as_list() # bs, 128, 128
+    def init_centers(self):
+        def init_centers():
+            return tf.zeros([self.num_classes, self.feat_dim])
+
+        self.centers = tf.Variable(
+            initial_value=init_centers,
+            dtype=tf.float32,
+            name='centers'
+        )
+
         bs = 1
 
-
-        # single char labels required by center_loss op
-        # self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None], name="bat_labels")
-        self.bat_labels = labels
-        # nums of chars in each sample, used to filter sample to do center loss
-        # self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None], name="char_num")
-        self.char_num = np.zeros(shape=(bs,), dtype=np.int32)
-        # char pos: the positions of chars
-        # 因为 tensorflow 对在循环中长度改变的张量会报错，所以在此作为 placeholder 传入
+        # self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None,], name="char_num")
+        # self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None,], name="bat_labels")
         # self.char_pos_init = tf.compat.v1.placeholder(tf.int32, shape=[None, 2], name='char_pos')
-        self.char_pos_init = np.zeros(shape=(bs, 2), dtype=np.int32)
+
+        # to variables
+        # self.char_num = tf.Variable(tf.zeros([bs,], dtype=tf.int32), name='char_num')
+        # self.bat_labels = tf.Variable(tf.zeros([bs,], dtype=tf.int32), name='bat_labels')
+        # self.char_pos_init = tf.Variable(tf.zeros([bs, 2], dtype=tf.int32), name='char_pos')
+
+    def call(self, y_pred, cnn_out, y_true):
+        bs, f, c = tf.shape(cnn_out)[0], tf.shape(cnn_out)[1], tf.shape(cnn_out)[2]
+        batch_size = K.shape(y_pred)[0]
+        print('bs, f, c:', bs, f, c)
+        print('batch_size:', batch_size)
+        quit()
+        # bs = 1
+
+        # # single char labels required by center_loss op
+        # self.bat_labels = tf.compat.v1.placeholder(tf.int32, shape=[None], name="bat_labels")
+        self.bat_labels = y_true
+        # # nums of chars in each sample, used to filter sample to do center loss
+        # # self.char_num = tf.compat.v1.placeholder(tf.int32, shape=[None], name="char_num")
+        self.char_num = tf.Variable(
+            initial_value=tf.zeros([bs,], dtype=tf.int32),
+            dtype=tf.int32,
+            name='char_num')
+        # # char pos: the positions of chars
+        # # 因为 tensorflow 对在循环中长度改变的张量会报错，所以在此作为 placeholder 传入
+        # # self.char_pos_init = tf.compat.v1.placeholder(tf.int32, shape=[None, 2], name='char_pos')
+        self.char_pos_init = tf.Variable(tf.zeros([bs, 2], dtype=tf.int32), name='char_pos')
 
         # Reshape to the shape lstm needed. [batch_size, max_time, ..]
         # [batch_size, steps, features]
         self.embedding = cnn_reshaped
-        self.raw_pred = tf.argmax(logits, axis=2, name='raw_prediction')
+        self.raw_pred = tf.argmax(y_pred, axis=-1, name='raw_prediction')
 
         # 使用单个样本的对齐策略，如果一个样本中有重复预测，则去重后参与 center_loss 计算，如果有漏字，则不参与 center_loss 计算
         # 生成参与 center loss 计算的 embedding features 和标签
-        self.raw_pred_to_features(
+        self.char_label, self.embedding = self.raw_pred_to_features(
             self.raw_pred,
             self.bat_labels,
             self.embedding,
@@ -50,13 +149,8 @@ class CenterLossLayer(Layer):
             self.char_pos_init)
 
         # 计算 center loss
-        self.center_loss = self.get_center_loss(
-            self.embedding,
-            self.char_label,
-            self.alpha,
-            self.num_classes)
-
-        return self.center_loss
+        loss = self.get_center_loss(self.embedding, self.char_label)
+        return loss
 
     def get_center_loss(self, features, labels):
         """获取center loss及center的更新op
@@ -65,17 +159,17 @@ class CenterLossLayer(Layer):
             labels: Tensor,表征样本label,非one-hot编码,shape应为[batch_size].
             alpha: 0-1之间的数字,控制样本类别中心的学习率,细节参考原文.
             num_classes: 整数,表明总共有多少个类别,网络分类输出有多少个神经元这里就取多少.
-            verbose: 打印中间过程
         Return:
             loss: Tensor,可与softmax loss相加作为总的loss进行优化.
-            centers: Tensor,存储样本中心值的Tensor，仅查看样本中心存储的具体数值时有用.
             centers_update_op: op,用于更新样本中心的op，在训练时需要同时运行该op，否则样本中心不会更新
         """
         # 获取特征的维数，例如256维
         len_features = features.get_shape()[1]
 
         # 建立一个Variable,shape为[num_classes, len_features]，用于存储整个网络的样本中心
-        centers = np.zeros(shape=(self.num_classes, len_features), dtype=np.float32)
+        # update centers when training
+        # centers = tf.Variable(tf.zeros([self.num_classes, len_features]), dtype=tf.float32, name='centers')
+        centers = self.centers
         # 将label展开为一维的，输入如果已经是一维的，则该动作其实无必要
         # labels = tf.reshape(labels, [-1])
         print('tf.shape(labels):', tf.shape(labels))
@@ -85,7 +179,6 @@ class CenterLossLayer(Layer):
         centers_batch = tf.gather(centers, labels)
         # 计算loss
         loss = tf.nn.l2_loss(features - centers_batch)
-
         # 当前mini-batch的特征值与它们对应的中心值之间的差
         diff = centers_batch - features
 
@@ -127,8 +220,7 @@ class CenterLossLayer(Layer):
             char_seg_num = tf.shape(char_pos)[0]
 
             if not tf.equal(char_seg_num, char_num[i]):
-                # tf.print('切出的字符数量与真实值不同，忽略此样本：',
-                #          label[char_total:char_total + char_num[i]], char_seg_num, 'vs', char_num[i], summarize=-1)
+                # tf.print('切出的字符数量与真实值不同，忽略此样本')
                 label = tf.concat([label[:char_total], label[char_total + char_num[i]:]], axis=0)
                 i = tf.add(i, 1)
                 continue
@@ -184,9 +276,9 @@ class CenterLossLayer(Layer):
             char_rep = tf.equal(raw_pred[:, :-1], raw_pred[:, 1:])
             tail = tf.greater(raw_pred[:, :1], self.num_classes - 1)
             char_rep = tf.concat([char_rep, tail], axis=1)
-            # 去掉重复字符之后的字符位置，重复字符取其 最后一次 出现的位置
+            # 去掉重复字符之后的字符位置，重复字符取其 [最后一次]出现的位置
             char_no_rep = tf.math.logical_and(is_char, tf.math.logical_not(char_rep))
-            # 得到字符位置 和 相应的标签，如果某张图片 预测出来的字符数量 和gt不一致则跳过
+            # 得到字符位置 和 相应的标签，如果某张图片预测出来的字符数量和gt不一致则跳过
             self.char_pos, self.char_label = self.get_char_pos_and_label(
                 preds=char_no_rep,
                 label=label,
@@ -195,9 +287,11 @@ class CenterLossLayer(Layer):
             # 根据字符位置得到字符的 embedding
             self.embedding = self.get_features(self.char_pos, embedding)
 
+        return self.char_label, self.embedding
+
 
 class FocalLossLayer(Layer):
-    def __init__(self, alpha=0.1, gamma=5.0, name=None, **kwargs):
+    def __init__(self, alpha=1.0, gamma=5.0, name=None, **kwargs):
         super(FocalLossLayer, self).__init__(name=name, **kwargs)
         self.loss_fn = K.ctc_batch_cost
         self.alpha = alpha
@@ -209,8 +303,7 @@ class FocalLossLayer(Layer):
         loss = self.loss_fn(y_true, y_pred, input_length, label_length)
         p = tf.exp(-loss)
         focal_ctc_loss = tf.multiply(tf.multiply(self.alpha, tf.pow((1 - p), self.gamma)), loss)
-        loss = tf.reduce_mean(focal_ctc_loss)
-        return loss
+        return tf.reduce_mean(focal_ctc_loss)
 
     def get_config(self):
         config = super(FocalLossLayer, self).get_config()
@@ -218,49 +311,65 @@ class FocalLossLayer(Layer):
         return config
 
 
-class ACELayer(Layer):
-    def __init__(self, name=None, **kwargs):
-        super(ACELayer, self).__init__(name=name, **kwargs)
-        self.softmax = None
-        self.label = None
+class CE_loss(Layer):
+    def __init__(self, name="ce_loss"):
+        super(CE_loss, self).__init__(name=name)
 
-    def call(self, label, inputs):
-        shape_len = len(inputs.shape)
+    def call(self, y_true, y_pred, **kwargs):
 
-        if shape_len == 3:
-            bs, h, c = inputs.shape.as_list()
-            T_ = h
-        elif shape_len == 4:
-            bs, h, w, c = inputs.shape.as_list()
-            T_ = h * w
-
-        inputs = tf.reshape(inputs, (bs, T_, -1))
-        inputs = inputs + 1e-10
-
-        self.softmax = inputs
-        nums, dist = label[:,0], label[:,1:]
-        nums = T_ - nums
-
-        inputs = tf.reduce_sum(inputs, axis=1)
-        inputs = inputs / T_
-        label = label / T_
-
-        # convert to float32
-        label = tf.cast(label, tf.float32)
-        mul = tf.math.log(inputs) * label
-        loss = (-tf.reduce_sum(mul)) / bs
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)(y_true, y_pred)
         return loss
 
-    def decode_batch(self, inputs):
-        self.softmax = inputs
-        out_best = tf.argmax(self.softmax, 2).numpy()
-        pre_result = [0]*self.bs
 
-        for j in range(self.bs):
-            pre_result[j] = out_best[j][out_best[j]!=0].astype(np.int32)
+class BCE_loss(Layer):
+    def __init__(self, name="ce_loss"):
+        super(BCE_loss, self).__init__(name=name)
 
-        # using groupby to remove duplicate
-        for i in range(self.bs):
-            pre_result[i] = [k for k, g in groupby(pre_result[i])]
+    def call(self, y_true, y_pred, **kwargs):
 
-        return pre_result
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=False)(y_true, y_pred)
+        return loss
+
+
+class BinaryFocalLoss(Layer):
+    def __init__(self, alpha=0.5, gamma=2.0, name=None, **kwargs):
+        super(BinaryFocalLoss, self).__init__(name=name, **kwargs)
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def get_config(self):
+        config = super(BinaryFocalLoss, self).get_config()
+        config.update({"alpha": self.alpha, "gamma": self.gamma})
+        return config
+
+    def call(self, y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        f_loss = self.alpha * (1 - y_pred) ** self.gamma * y_true * K.log(y_pred)  # β*(1-p̂)ᵞ*p*log(p̂)
+        f_loss += (1 - self.alpha) * y_pred ** self.gamma * (1 - y_true) * K.log(1 - y_pred)  # (1-β)*p̂ᵞ*(1−p)*log(1−p̂)
+        f_loss = -f_loss  # −[β*(1-p̂)ᵞ*p*log(p̂) + (1-β)*p̂ᵞ*(1−p)*log(1−p̂)]
+
+        # Average over each data point/image in batch
+        axis_to_reduce = range(1, K.ndim(f_loss))
+        f_loss = K.mean(f_loss, axis=axis_to_reduce)
+        return f_loss
+
+
+class DiceLoss(Layer):
+    def __init__(self, smooth=1e-5, name=None, **kwargs):
+        super(DiceLoss, self).__init__(name=name, **kwargs)
+        self.smooth = smooth
+
+    def get_config(self):
+        config = super(DiceLoss, self).get_config()
+        config.update({"smooth": self.smooth})
+        return config
+
+    def call(self, y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        # flatten label and prediction tensors
+        y_true_f = tf.reshape(y_true, [-1])
+        y_pred_f = tf.reshape(y_pred, [-1])
+        intersection = tf.reduce_sum(y_true_f * y_pred_f)
+        dice = (2. * intersection + self.smooth) / (tf.reduce_sum(y_true_f) + tf.reduce_sum(y_pred_f) + self.smooth)
+        dice_loss = 1 - tf.reduce_mean(dice)
+        return dice_loss
