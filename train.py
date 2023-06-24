@@ -35,27 +35,27 @@ TRAIN_SAMPLE = 20000
 TEST_SAMPLE = 1000
 NUM_EPOCHS = 1
 WARMUP_EPOCH = 0
-LEARNING_RATE = 3e-50
+LEARNING_RATE = 1e-40
 
 metrics_keys = "val_ctc_loss"
-metrics_keys = "val_loss"
+# metrics_keys = "val_loss"
 
-optimizer = Adam(
-    learning_rate=LEARNING_RATE,
-    # decay=0.00001,
-    amsgrad=True,
-)
-# optimizer = SGD(
+# optimizer = Adam(
 #     learning_rate=LEARNING_RATE,
-#     decay=1e-6,
-#     momentum=0.9,
-#     nesterov=True,
+#     # decay=0.00001,
+#     amsgrad=True,
 # )
+optimizer = SGD(
+    learning_rate=LEARNING_RATE,
+    decay=1e-6,
+    momentum=0.9,
+    nesterov=True,
+)
 
 input_shape = (64, 128, 1)
 char_num = 85
 datasetType = DatasetType.BALANCE
-ratio = 1.0
+ratio = 2.0
 
 train_dataloader = LPGenerate(
     BATCH_SIZE,
@@ -93,7 +93,7 @@ model = TinyLPR(
 ])
 
 # model.load_weights('best_model.h5', by_name=True, skip_mismatch=True)
-model.load_weights('b1_1589.h5', by_name=True, skip_mismatch=True)
+# model.load_weights('b2_1569.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(
@@ -157,7 +157,7 @@ def eval(dir_path='eval'):
     ).build(input_shape=(BATCH_SIZE, *input_shape))
 
     test_model.load_weights(filepath='best_model.h5')
-    # test_model.load_weights(filepath='s9576_d9528_fa9721.h5')
+    # test_model.load_weights(filepath='s9259_d9583_fa9333.h5')
 
     total_count = len(evl_dataloader.images)
     sum_single = len([x for x in evl_dataloader.images if x.find(' ') == -1])

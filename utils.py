@@ -179,7 +179,7 @@ class LPGenerate(Sequence):
         sample_num=5000,
         evl_mode=False,
         datasetType=DatasetType.FULL,
-        ratio=3.0
+        ratio=2.0
     ):
         self.ratio = ratio
         self.batch_size = batch_size
