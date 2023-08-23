@@ -3,4 +3,10 @@ test/*
 eval/*
 logs/*
 road/*
+balance_ds/*
+data/*
 __pycache__/*.pyc
+*.h5
+*.ckpt
+*.pth
+

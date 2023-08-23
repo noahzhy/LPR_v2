@@ -61,4 +61,4 @@ if __name__ == '__main__':
     # divide the images into train and test
     # divide_train_test('total')
 
-    count_dataset_single_and_double_ratio('train')
+    count_dataset_single_and_double_ratio('data')

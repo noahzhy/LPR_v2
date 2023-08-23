@@ -120,11 +120,11 @@ class TinyLPR(tf.keras.Model):
         self.model = MobileNetV3Small()
 
         # skip connection
-        self.skip = Conv2D(96, 1, strides=1, padding='same', kernel_initializer='he_normal', name='c1_conv')
+        self.skip = Conv2D(96, 1, strides=2, padding='same', kernel_initializer='he_normal', name='c1_conv')
 
         self.mask_head = Sequential([
             UpSampling2D(size=(2, 2), interpolation="bilinear", name='seg_upsample1'),
-            Conv2D(self.output_dim, 1, padding='same', kernel_initializer='he_normal', name='seg_mask', activation='sigmoid'),
+            Conv2D(1, 1, padding='same', kernel_initializer='he_normal', name='seg_mask', activation='sigmoid'),
             UpSampling2D(size=(4, 4), interpolation="bilinear", name='seg_upsample2'),
         ], name='mask_head')
 
@@ -150,11 +150,16 @@ class TinyLPR(tf.keras.Model):
         f_map = c3
         # attention
         attn = Attn(f_map, 96, train=self.train)
-        c2 = self.skip(c2)
-        concat = tf.multiply(attn, c2)
+        c1 = self.skip(c1)
+        concat = tf.multiply(attn, c1)
+
+        # # batch norm
+        # concat = BatchNormalization(name='bn_last', trainable=self.train)(concat)
+
         # flatten
         x = tf.reshape(concat, (tf.shape(concat)[0], 128, 96), name='flatten_reshape')
         x = tf.transpose(x, perm=[0, 2, 1], name='flatten_transpose')
+
 
         if self.train:
             x = self.dropout(x)

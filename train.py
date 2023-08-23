@@ -27,41 +27,41 @@ if os.path.exists('./logs'):
 
 # training config
 MAX_LABEL_LENGTH = 10
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 
 # TRAIN_SAMPLE = len(glob.glob('train/*.jpg'))
 # TEST_SAMPLE = len(glob.glob('test/*.jpg'))
 TRAIN_SAMPLE = 20000
 TEST_SAMPLE = 1000
-NUM_EPOCHS = 1
+NUM_EPOCHS = 200
 WARMUP_EPOCH = 0
-LEARNING_RATE = 1e-40
+LEARNING_RATE = 2e-3
 
 metrics_keys = "val_ctc_loss"
 # metrics_keys = "val_loss"
 
-# optimizer = Adam(
-#     learning_rate=LEARNING_RATE,
-#     # decay=0.00001,
-#     amsgrad=True,
-# )
-optimizer = SGD(
+optimizer = Adam(
     learning_rate=LEARNING_RATE,
-    decay=1e-6,
-    momentum=0.9,
-    nesterov=True,
+    # decay=0.00001,
+    amsgrad=True,
 )
+# optimizer = SGD(
+#     learning_rate=LEARNING_RATE,
+#     decay=1e-6,
+#     momentum=0.9,
+#     nesterov=True,
+# )
 
 input_shape = (64, 128, 1)
 char_num = 85
 datasetType = DatasetType.BALANCE
-ratio = 2.0
+ratio = 1.0
 
 train_dataloader = LPGenerate(
     BATCH_SIZE,
     shuffle=True,
     sample_num=TRAIN_SAMPLE,
-    dir_path='train',
+    dir_path='data/train',
     target_size=input_shape[:2],
     datasetType=datasetType,
     ratio=ratio,
@@ -70,7 +70,7 @@ test_dataloader = LPGenerate(
     BATCH_SIZE,
     shuffle=False,
     sample_num=TEST_SAMPLE,
-    dir_path='test',
+    dir_path='data/test',
     target_size=input_shape[:2],
     datasetType=datasetType,
     ratio=ratio,
@@ -93,7 +93,7 @@ model = TinyLPR(
 ])
 
 # model.load_weights('best_model.h5', by_name=True, skip_mismatch=True)
-# model.load_weights('b2_1569.h5', by_name=True, skip_mismatch=True)
+# model.load_weights('b1_8049.h5', by_name=True, skip_mismatch=True)
 
 # Create the Learning rate scheduler.
 warm_up_lr = WarmUpCosineDecayScheduler(

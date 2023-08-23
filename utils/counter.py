@@ -37,7 +37,7 @@ def list_all_files(dir_path):
 
 # main
 if __name__ == '__main__':
-    letters = list_all_files('train')
+    letters = list_all_files('data')
     plt.figure(figsize=(15, 5))
     # show it in bar with value
     plt.bar(range(len(letters)), list(letters.values()), tick_label=list(letters.keys()))
